@@ -5,6 +5,8 @@ import sys
 import subprocess
 from dotenv import load_dotenv
 
+load_dotenv()
+
 MATRIX_HOMESERVER = "https://matrix.org"
 USERNAME = "@ivan_lorrens_repo_bot:matrix.org"  
 PASSWORD = os.getenv('PASSWORD')

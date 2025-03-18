@@ -4,6 +4,8 @@ import os
 import sys
 from dotenv import load_dotenv
 
+load_dotenv()
+
 MATRIX_HOMESERVER = "https://matrix.org"
 USERNAME = "@ivan_lorrens_repo:matrix.org"  
 PASSWORD = os.getenv('PASSWORD')
