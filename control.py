@@ -1,8 +1,6 @@
 import random
 import threading
 import time
-from typing import Self
-import uuid
 from matrix_client.client import MatrixClient, Room
 from matrix_client.api import MatrixRequestError
 from requests.exceptions import MissingSchema
@@ -171,7 +169,7 @@ class BotnetController:
                 room.set_all_inactive()
             self.send_to_all("PING")
             time.sleep(5) # wait a bit
-            # Sweep
+            # & Sweep
             for room in self.command_rooms.values():
                 room.delete_inactive_bots()
             self.pinging = False
@@ -211,6 +209,10 @@ class BotnetController:
         room_name = room_name.replace(" ", "_")
         self.add_command_room(room_name)
         print("[+] room created successfully")
+    
+    def dump_state(self):
+        # TODO
+        pass
 
     def run(self):
         self.login()
@@ -224,8 +226,9 @@ class BotnetController:
         print("[+] Controller ready. Enter commands to send to bots.")
         while True:
             print("#1 Send Command")
-            print("#2 Show botnet state")
+            print("#2 Show simple botnet state")
             print("#3 Create Room")
+            print("#4 Dump state to file")
             option = int(input("What would you like to do? "))
             print()
             match option:
@@ -235,6 +238,8 @@ class BotnetController:
                     self.show_state_option()
                 case 3:
                     self.create_room_option()
+                case 4:
+                    self.dump_state()
                 case _:
                     print("Invalid Option, choose again")
 
