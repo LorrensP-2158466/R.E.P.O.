@@ -5,11 +5,17 @@ from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 from rich.align import Align
 from rich.layout import Layout
+import pyfiglet  
 
 class BotnetGUI:
     def __init__(self, controller: BotnetController):
         self.controller = controller
         self.console = Console()
+        
+    def print_ascii_title(self):
+        # Generate the ASCII art title using pyfiglet
+        ascii_title = pyfiglet.figlet_format("R.E.P.O", font="slant")
+        self.console.print(Align.center(ascii_title))
 
     def send_command(self):
         try:
@@ -110,7 +116,7 @@ class BotnetGUI:
         while True:
             try:
                 self.console.clear()
-                self.console.print(Align.center(Panel("[bold blue]Botnet Controller[/]", expand=True)))
+                self.print_ascii_title()
                 
                 table = Table(title="Main Menu")
                 table.add_column("Option", justify="center", style="bold yellow")
