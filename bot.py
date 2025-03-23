@@ -51,11 +51,11 @@ class Bot:
     def join_room(self, roomid) -> Room:
         # check if already joined, if not join the room
         try:
-            room = self.client.rooms[roomid]
-            print(f"Already joined room: {room.display_name}")
+            room: Room = self.client.rooms[roomid]
+            print(f"Already joined room: {room.name}")
         except KeyError:
-            room = self.client.join_room(roomid)
-            print(f"Joined room: {room.display_name}")
+            room: Room = self.client.join_room(roomid)
+            print(f"Joined room: {room.name}")
         return room
         
     def announce(self):
@@ -89,9 +89,12 @@ class Bot:
             PAYLOAD_ROOM_ID,
             "",
             "b",
-            limit=1
+            limit=5
         )
-        self.download_file(payload_event["chunk"][0])
+        for event in payload_event["chunk"]:
+            if event.get("msgtype", "") == "m.image":
+                self.download_file(event)
+                break
         
     def get_system_info(self) -> str:
         return json.dumps({
@@ -113,7 +116,7 @@ class Bot:
         if botid == self.bot_id:
             self.command_room = self.join_room(roomid)
             self.client.remove_listener(self.announce_listener)
-            self.command_listener = self.command_room.add_listener(self.on_command)
+            self.command_listener = self.command_room.add_listener(self.on_command, event_type="m.room.message")
                 
     def on_command(self, room, event):
         msgbody: str = event["content"]["body"]
@@ -123,7 +126,7 @@ class Bot:
         self.login()
         self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
         
-        self.announce_listener = self.announce_room.add_listener(self.on_announcement)
+        self.announce_listener = self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
         self.client.start_listener_thread()
         
         self.announce()
