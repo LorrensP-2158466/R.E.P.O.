@@ -1,0 +1,156 @@
+from botnetController import BotnetController
+from rich.console import Console
+from rich.table import Table
+from rich.prompt import Prompt, Confirm
+from rich.panel import Panel
+from rich.align import Align
+from rich.layout import Layout
+
+class BotnetGUI:
+    def __init__(self, controller: BotnetController):
+        self.controller = controller
+        self.console = Console()
+
+    def send_command(self):
+        try:
+            self.console.clear()
+            self.console.print(Align.center(Panel("[bold green]Send Command[/]", expand=True)))
+            command = Prompt.ask("[bold cyan]Enter the command to send[/]")
+            send_to_all = Confirm.ask("[bold yellow]Send to all rooms?[/]")
+            
+            if send_to_all:
+                self.controller.send_to_all(command)
+                self.console.print("[bold green]Command sent to all rooms![/]")
+            else:
+                self.select_room(command)
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/] {str(e)}")
+            
+    def select_room(self, command):
+        try:
+            self.console.clear()
+            self.console.print(Align.center(Panel("[bold green]Select Room[/]", expand=True)))
+            room_list = list(self.controller.command_rooms.items())
+            
+            table = Table(title="Available Rooms")
+            table.add_column("Index", justify="center", style="bold yellow")
+            table.add_column("Room Name", style="bold cyan")
+            table.add_column("Bot Count", justify="center", style="bold magenta")
+            
+            for idx, (_, room) in enumerate(room_list):
+                table.add_row(str(idx), room.room.name[4:], str(len(room.bots)))
+            
+            self.console.print(Align.center(table))
+            
+            room_nr = int(Prompt.ask("[bold white]Enter room number[/]", choices=[str(i) for i in range(len(room_list))]))
+            _, room = room_list[room_nr]
+            self.controller.send_command(command, room)
+            self.console.print("[bold green]Command sent successfully![/]")
+        except ValueError:
+            self.console.print("[bold red]Invalid input. Please enter a valid number.[/]")
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/] {str(e)}")
+            
+    def show_bot_status_in_room(self, room):
+        self.console.clear()
+        self.console.print(Align.center(Panel(f"[bold green]Bots in Room: {room.room.name}[/]", expand=True)))
+
+        bot_table = Table(title="Bot Statuses")
+        bot_table.add_column("Bot ID", style="bold cyan")
+        bot_table.add_column("Status", justify="center", style="bold white")
+
+        # TODO: now uses pinging status, but should use payload status 
+        for id, (bot, status) in room.bots.items():
+            status = "[bold green]● Active[/]" if status else "[bold red]● Inactive[/]"
+            bot_table.add_row(bot.hostname, status)
+
+        self.console.print(Align.center(bot_table))
+        Prompt.ask("[bold white]Press Enter to return to the main menu...")
+
+    def show_state(self):
+        try:
+            self.console.clear()
+            self.console.print(Align.center(Panel("[bold green]Botnet State[/]", expand=True)))
+            
+            table = Table(title="Botnet Status")
+            table.add_column("Room Name", style="bold cyan")
+            table.add_column("Bot Count", justify="center", style="bold magenta")
+            
+            total_bots = 0
+            room_list = list(self.controller.command_rooms.items())
+            for _, room in room_list:
+                bot_count = len(room.bots)
+                total_bots += bot_count
+                table.add_row(room.room.name[4:], str(bot_count))
+            
+            self.console.print(Align.center(table))
+            self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
+
+            room_names = [room.room.name[4:] for _, room in room_list]
+            room_name = "cmd_" + Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
+
+            if room_name != "":
+                selected_room = [room for _, room in room_list if room.room.name == room_name][0]
+                self.show_bot_status_in_room(selected_room)
+
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/] {str(e)}")
+    
+    def create_room(self):
+        try:
+            self.console.clear()
+            self.console.print(Align.center(Panel("[bold green]Create Room[/]", expand=True)))
+            room_name = Prompt.ask("[bold yellow]Enter room name[/]").replace(" ", "_")
+            self.controller.add_command_room(room_name)
+            self.console.print("[bold green]Room created successfully![/]")
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/] {str(e)}")
+    
+    def main_menu(self):
+        while True:
+            try:
+                self.console.clear()
+                self.console.print(Align.center(Panel("[bold blue]Botnet Controller[/]", expand=True)))
+                
+                table = Table(title="Main Menu")
+                table.add_column("Option", justify="center", style="bold yellow")
+                table.add_column("Description", style="bold white")
+                
+                options = {
+                    "1": "Send Command",
+                    "2": "Show Botnet State",
+                    "3": "Create Room",
+                    "4": "Exit"
+                }
+                
+                for key, desc in options.items():
+                    table.add_row(key, desc)
+                
+                self.console.print(Align.center(table))
+                choice = Prompt.ask("[bold white]Select an option[/]", choices=options.keys())
+                
+                match choice:
+                    case "1":
+                        self.send_command()
+                    case "2":
+                        self.show_state()
+                    case "3":
+                        self.create_room()
+                    case "4":
+                        self.console.print("[bold red]Exiting...[/]")
+                        break
+                    case _:
+                        self.console.print("[bold red]Invalid option! Try again.[/]")
+            except Exception as e:
+                self.console.print(f"[bold red]Error:[/] {str(e)}")
+    
+    def run(self):
+        try:
+            self.controller.run()
+            self.main_menu()
+        except Exception as e:
+            self.console.print(f"[bold red]Error during startup:[/] {str(e)}")
+
+if __name__ == "__main__":
+    gui = BotnetGUI(BotnetController())
+    gui.run()

