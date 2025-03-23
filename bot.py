@@ -11,9 +11,9 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv()
-USER_NAME = os.getenv('USER_NAME')  
-PASSWORD = os.getenv('PASSWORD')
-ROOM_ID = os.getenv('ROOM_ID')
+USER_NAME = os.getenv('BOT_NAME')  
+PASSWORD = os.getenv('BOT_PASSWORD')
+ANNOUNCE_ROOM_ID = os.getenv('ANNOUNCE_ROOM_ID')
 PAYLOAD_ROOM_ID = os.getenv('PAYLOAD_ROOM_ID')
 MATRIX_HOMESERVER = "https://matrix.org"
 MATRIX_DOWNLOAD_PREFIX = "https://matrix-client.matrix.org/_matrix/client/v1/media/download/"
@@ -121,7 +121,7 @@ class Bot:
 
     def run(self):
         self.login()
-        self.announce_room = self.join_room(ROOM_ID)
+        self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
         
         self.announce_listener = self.announce_room.add_listener(self.on_announcement)
         self.client.start_listener_thread()
