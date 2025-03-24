@@ -13,8 +13,7 @@ class BotnetGUI:
         self.console = Console()
         
     def print_ascii_title(self):
-        # Generate the ASCII art title using pyfiglet
-        ascii_title = pyfiglet.figlet_format("R.E.P.O", font="slant")
+        ascii_title = pyfiglet.figlet_format("R.E.P.O.", font="slant")
         self.console.print(Align.center(ascii_title))
 
     def send_command(self):
@@ -28,30 +27,31 @@ class BotnetGUI:
                 self.controller.send_to_all(command)
                 self.console.print("[bold green]Command sent to all rooms![/]")
             else:
-                self.select_room(command)
+                room = self.select_room()
+                self.controller.send_command(command, room)
+                self.console.print("[bold green]Command sent successfully![/]")
         except Exception as e:
             self.console.print(f"[bold red]Error:[/] {str(e)}")
             
-    def select_room(self, command):
+    def select_room(self):
         try:
             self.console.clear()
             self.console.print(Align.center(Panel("[bold green]Select Room[/]", expand=True)))
             room_list = list(self.controller.command_rooms.items())
             
-            table = Table(title="Available Rooms")
+            table = Table()
             table.add_column("Index", justify="center", style="bold yellow")
             table.add_column("Room Name", style="bold cyan")
             table.add_column("Bot Count", justify="center", style="bold magenta")
             
             for idx, (_, room) in enumerate(room_list):
-                table.add_row(str(idx), room.room.name[4:], str(len(room.bots)))
+                table.add_row(str(idx + 1), room.room.name[4:], str(len(room.bots)))
             
             self.console.print(Align.center(table))
             
-            room_nr = int(Prompt.ask("[bold white]Enter room number[/]", choices=[str(i) for i in range(len(room_list))]))
-            _, room = room_list[room_nr]
-            self.controller.send_command(command, room)
-            self.console.print("[bold green]Command sent successfully![/]")
+            room_nr = int(Prompt.ask("[bold white]Enter room number[/]", choices=[str(i + 1) for i in range(len(room_list))]))
+            _, room = room_list[room_nr - 1]
+            return room
         except ValueError:
             self.console.print("[bold red]Invalid input. Please enter a valid number.[/]")
         except Exception as e:
@@ -61,7 +61,7 @@ class BotnetGUI:
         self.console.clear()
         self.console.print(Align.center(Panel(f"[bold green]Bots in Room: {room.room.name}[/]", expand=True)))
 
-        bot_table = Table(title="Bot Statuses")
+        bot_table = Table()
         bot_table.add_column("Bot ID", style="bold cyan")
         bot_table.add_column("Status", justify="center", style="bold white")
 
@@ -78,7 +78,7 @@ class BotnetGUI:
             self.console.clear()
             self.console.print(Align.center(Panel("[bold green]Botnet State[/]", expand=True)))
             
-            table = Table(title="Botnet Status")
+            table = Table()
             table.add_column("Room Name", style="bold cyan")
             table.add_column("Bot Count", justify="center", style="bold magenta")
             
@@ -111,6 +111,16 @@ class BotnetGUI:
             self.console.print("[bold green]Room created successfully![/]")
         except Exception as e:
             self.console.print(f"[bold red]Error:[/] {str(e)}")
+            
+    def delete_room(self):
+        try:
+            self.console.clear()
+            self.console.print(Align.center(Panel("[bold green]Delete Room[/]", expand=True)))
+            room = self.select_room()
+            self.controller.delete_room(room)
+            self.console.print("[bold green]Room created successfully![/]")
+        except Exception as e:
+            self.console.print(f"[bold red]Error:[/] {str(e)}")
     
     def main_menu(self):
         while True:
@@ -118,7 +128,7 @@ class BotnetGUI:
                 self.console.clear()
                 self.print_ascii_title()
                 
-                table = Table(title="Main Menu")
+                table = Table()
                 table.add_column("Option", justify="center", style="bold yellow")
                 table.add_column("Description", style="bold white")
                 
@@ -126,7 +136,8 @@ class BotnetGUI:
                     "1": "Send Command",
                     "2": "Show Botnet State",
                     "3": "Create Room",
-                    "4": "Exit"
+                    "4": "Delete Room",
+                    "5": "Exit"
                 }
                 
                 for key, desc in options.items():
@@ -143,6 +154,8 @@ class BotnetGUI:
                     case "3":
                         self.create_room()
                     case "4":
+                        self.delete_room()
+                    case "5":
                         self.console.print("[bold red]Exiting...[/]")
                         break
                     case _:

