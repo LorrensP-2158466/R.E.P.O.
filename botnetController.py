@@ -207,7 +207,7 @@ class BotnetController:
             self.command_rooms[new_room.room_id] = CommandRoom(new_room)
 
     def ping_loop(self):
-        time.sleep(5)
+        time.sleep(2)
         while True:
             time.sleep(10)
             # Mark
@@ -234,6 +234,3 @@ class BotnetController:
         threading.Thread(name="PING THREAD", target=self.ping_loop, daemon=True).start()
         
         
-if __name__ == "__main__":
-    controller = BotnetController()
-    controller.run()
