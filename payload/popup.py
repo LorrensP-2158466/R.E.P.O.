@@ -64,7 +64,7 @@ class JumpingWindow:
         """Add an image from local file as background"""
         try:
             # Path to your image file - REPLACE THIS with your actual image path
-            image_path = "donkey.gif"  # Example: "C:/Users/YourName/Pictures/funny_cat.jpg"
+            image_path = os.path.dirname(os.path.realpath(__file__)) + "/donkey.gif"  # Example: "C:/Users/YourName/Pictures/funny_cat.jpg"
             
             # Check if file exists
             if not os.path.exists(image_path):
