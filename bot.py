@@ -221,7 +221,7 @@ class Bot:
             else:
                 print("INVALID PAYLOAD COMMAND:", status)
         else:
-            print(msgbody)
+            print(f"UNKNOWN: {msgbody}")
             
     def make_announcement_listener(self) -> uuid.UUID:
         if len(self.announce_room.listeners) == 0:

