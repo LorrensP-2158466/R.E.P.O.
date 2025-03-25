@@ -163,7 +163,7 @@ class Bot:
                 print("RECEIVED INDIVIDUAL CLEAR")
                 self.start_room_search()
 
-        if command == "PAYLOAD":
+        elif command.startswith("PAYLOAD"):
             command, status = command.split(":", 1)
             if status == "START":
                 pass
