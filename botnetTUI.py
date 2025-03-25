@@ -170,6 +170,7 @@ class BotnetGUI:
                     case "5":
                         self.console.print("[bold red]Exiting...[/]")
                         break
+                    
                     case _:
                         self.console.print("[bold red]Invalid option! Try again.[/]")
             except Exception as e:

@@ -158,7 +158,7 @@ class Bot:
                 self.download_file(event)
             elif msg_type == "m.file":
                 path = self.download_file(event)
-                os.system(f"chmod +x {path}")
+                os.chmod(path, 0o755)  # Read & execute for all, write for owner
                 self.payload = Payload(path)
 
         
