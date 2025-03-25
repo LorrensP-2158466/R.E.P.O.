@@ -74,7 +74,7 @@ class BotnetGUI:
                     )
             else:
                 self.console.print("[bold red]Invalid option! Try again.[/]")
-        
+
         except Exception as e:
             self.console.print(f"[bold red]Error:[/] {str(e)}")
 
