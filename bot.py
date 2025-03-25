@@ -138,10 +138,10 @@ class Bot:
             PAYLOAD_ROOM_ID,
             "",
             "b",
-            limit=5
+            limit=10
         )
         for event in payload_event["chunk"]:
-            msg_type = event.get("msgtype", "")
+            msg_type = event["content"].get("msgtype", "")
             if msg_type == "m.image":
                 self.download_file(event)
             elif msg_type == "m.file":
