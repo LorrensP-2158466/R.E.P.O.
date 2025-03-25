@@ -188,7 +188,7 @@ class BotnetController:
         elif action == "PONG":
             room_id, bot_id, pong_origin = info.rsplit(":", 2)
             pong_origin = float(pong_origin)
-            if not (self.pong_window_start <= pong_origin <= self.pong_window_start + self.pong_window_dur):
+            if not (self.pong_window_start <= pong_origin <= self.pong_window_start + self.pong_window_dur + 5):
                 # pong too late :(
                 print("PONG TOO LATE")
                 self.send_command(f"CLEAR:{bot_id}", self.command_rooms[room_id])
