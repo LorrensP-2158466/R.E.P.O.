@@ -32,13 +32,11 @@ class JumpingWindow:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
     
     def set_random_position(self):
-        """Set window to a random position on screen"""
         x = random.randint(0, self.screen_width - self.window_width)
         y = random.randint(0, self.screen_height - self.window_height)
         self.root.geometry(f"{self.window_width}x{self.window_height}+{x}+{y}")
     
     def track_mouse_position(self):
-        """Continuously check if mouse is near the window"""
         try:
             while self.running:
                 mouse_x = self.root.winfo_pointerx()
@@ -61,29 +59,22 @@ class JumpingWindow:
             print(f"Error in mouse tracking: {e}")
     
     def add_background_image(self):
-        """Add an image from local file as background"""
         try:
-            # Path to your image file - REPLACE THIS with your actual image path
-            image_path = os.path.dirname(os.path.realpath(__file__)) + "/donkey.gif"  # Example: "C:/Users/YourName/Pictures/funny_cat.jpg"
+            image_path = os.path.dirname(os.path.realpath(__file__)) + "/donkey.gif" 
             
-            # Check if file exists
             if not os.path.exists(image_path):
                 print(f"Image file not found: {image_path}")
                 raise FileNotFoundError(f"Image file not found: {image_path}")
                 
-            # Open and resize image
             image = Image.open(image_path)
             image = image.resize((self.window_width, self.window_height), Image.LANCZOS)
             
-            # Convert PIL Image to Tkinter PhotoImage
             photo = ImageTk.PhotoImage(image)
             
-            # Create a label with the image
             label = tk.Label(self.root, image=photo, borderwidth=0)
             label.image = photo  # Keep a reference to avoid garbage collection
             label.pack(fill="both", expand=True)
             
-            # Optional: Add text over the image (remove these lines if you don't want text)
             text_label = tk.Label(self.root, text="Can't catch me!", 
                                  font=("Arial", 10, "bold"),
                                  bg="white", fg="black")
@@ -91,7 +82,6 @@ class JumpingWindow:
             
         except Exception as e:
             print(f"Error loading image: {e}")
-            # Fallback to a colored background if image fails
             self.root.configure(bg="lightblue")
             fallback_label = tk.Label(self.root, text="Can't catch me!", 
                                      font=("Arial", 12, "bold"),
@@ -99,7 +89,6 @@ class JumpingWindow:
             fallback_label.pack(expand=True)
     
     def on_close(self):
-        """Properly clean up when window is closed"""
         self.running = False
         self.root.destroy()
 
