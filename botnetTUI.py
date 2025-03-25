@@ -18,24 +18,71 @@ class BotnetGUI:
         ascii_title = pyfiglet.figlet_format("R.E.P.O.", font="slant")
         self.console.print(Align.center(ascii_title))
 
+
+    def start_payload(self):
+        pass
+
+    def stop_payload(self):
+        pass
+
+    def custom_command(self):
+        pass
+
     def send_command(self):
         try:
             self.console.clear()
             self.console.print(Align.center(Panel("[bold green]Send Command[/]", expand=True)))
-            command = Prompt.ask("[bold cyan]Enter the command to send (or press Enter to return)[/]")
-            if command == "":
-                return
-            send_to_all = Confirm.ask("[bold yellow]Send to all rooms?[/]")
             
-            if send_to_all:
-                self.controller.send_to_all(command)
-                self.console.print("[bold green]Command sent to all rooms![/]")
+            send_to_all = Confirm.ask("[bold yellow]Send to all rooms?[/]")
+            room = None if send_to_all else self.select_room()
+            
+            options = {
+                "1": "Start Payload",
+                "2": "Stop Payload",
+                "3": "Custom Command",
+            }
+            
+            table = Table()
+            table.add_column("Option", justify="center", style="bold yellow")
+            table.add_column("Description", style="bold white")
+            
+            for key, desc in options.items():
+                table.add_row(key, desc)
+            
+            self.console.print(Align.center(table))
+            
+            choice = Prompt.ask("[bold white]Select an option[/]", choices=list(options.keys()))
+            if choice == "1":
+                self.execute_command(
+                    room, 
+                    self.controller.start_payload_all_rooms, 
+                    self.controller.start_payload_on_room
+                )
+            elif choice == "2":
+                self.execute_command(
+                    room, 
+                    self.controller.stop_payload_all_rooms, 
+                    self.controller.stop_payload_on_room
+                )
+            elif choice == "3":
+                command = Prompt.ask("[bold cyan]Enter the command to send (or press Enter to return)[/]")
+                if command:
+                    self.execute_command(
+                        room, 
+                        lambda: self.controller.send_to_all(command), 
+                        lambda r: self.controller.send_command(command, r)
+                    )
             else:
-                room = self.select_room()
-                self.controller.send_command(command, room)
-                self.console.print("[bold green]Command sent successfully![/]")
+                self.console.print("[bold red]Invalid option! Try again.[/]")
+        
         except Exception as e:
             self.console.print(f"[bold red]Error:[/] {str(e)}")
+
+    def execute_command(self, room, all_rooms_method, single_room_method):
+        if not room:
+            all_rooms_method()
+        else:
+            single_room_method(room)
             
     def select_room(self):
         try:
