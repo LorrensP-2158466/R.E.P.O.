@@ -16,8 +16,6 @@ import sys
 from dotenv import load_dotenv
 import atexit
 
-
-
 load_dotenv()
 USER_NAME = os.getenv('BOT_NAME')  
 PASSWORD = os.getenv('BOT_PASSWORD')
@@ -25,8 +23,6 @@ ANNOUNCE_ROOM_ID = os.getenv('ANNOUNCE_ROOM_ID')
 PAYLOAD_ROOM_ID = os.getenv('PAYLOAD_ROOM_ID')
 MATRIX_HOMESERVER = "https://matrix.org"
 MATRIX_DOWNLOAD_PREFIX = "https://matrix-client.matrix.org/_matrix/client/v1/media/download/"
-
-
 
 class Payload:
     payload_path: str
@@ -76,7 +72,7 @@ class Bot:
     command_listener: uuid.UUID
     
     last_ping: float = 0
-    ping_timeout_treshold: float = 15
+    ping_timeout_treshold: float = 60
 
     payload: Payload
     
