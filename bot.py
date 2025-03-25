@@ -174,7 +174,7 @@ class Bot:
         if not msgbody.startswith("RESOLVE"):
             return
         
-        botid, roomid = msgbody.removeprefix("RESOLVE ").split(":", 1)
+        botid, payload_status, roomid = msgbody.removeprefix("RESOLVE ").split(":", 2)
         if botid == self.bot_id:
             print("RESOLVING TO", roomid)
             with self.room_lock:
@@ -182,6 +182,8 @@ class Bot:
                 self.command_room = self.join_room(roomid)
                 self.announce_room.remove_listener(self.announce_listener)
                 self.command_listener = self.command_room.add_listener(self.on_command, event_type="m.room.message")
+                if payload_status == "E":
+                    self.payload.start()
             with self.ping_lock:
                 self.last_ping = time.time()
                 

