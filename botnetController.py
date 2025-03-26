@@ -61,8 +61,8 @@ class CommandRoom:
             del self.bots[bot_id]
             return True
         except:
-            print("Tried removing non-existing bot", bot_id)
-        return False
+            # print("Tried removing non-existing bot", bot_id)
+            return False
         
     def set_active(self, bot_id) -> bool:
         """
@@ -98,7 +98,7 @@ class CommandRoom:
     def clear(self) -> bool:
         return self.send_cmd("CLEAR:ALL")
     
-    def disconnect_bot(self):
+    def disconnect_bots(self):
         self.send_cmd("DISCONNECT")
 
     def send_cmd(self, cmd) -> bool:
@@ -156,10 +156,10 @@ class BotnetController:
             elif room.name == "announcements":
                 self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
 
-    def for_all_rooms(self, f, **args):
+    def for_all_rooms(self, f, *args):
         with self.command_room_lock:
             for cmd_room in self.command_rooms.values():
-                f(cmd_room, **args)
+                f(cmd_room, *args)
             
     def assign_bot(self, botdata, roomid):
         """
