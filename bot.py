@@ -82,7 +82,7 @@ class Bot:
     command_listener: uuid.UUID
     
     last_ping: float = 0
-    ping_timeout_treshold: float = 60
+    ping_timeout_treshold: float = 40
 
     payload: Payload
     
@@ -235,6 +235,9 @@ class Bot:
                 self.payload.start()
             elif status == "STOP":
                 self.payload.stop()
+
+        elif command == "DISCONNECT":
+            sys.exit(0)
         else:
             print(f"UNKNOWN: {msgbody}")
             
