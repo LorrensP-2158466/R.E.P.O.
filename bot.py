@@ -237,6 +237,7 @@ class Bot:
                 self.payload.stop()
 
         elif command == "DISCONNECT":
+            self.payload.stop()
             sys.exit(0)
         else:
             print(f"UNKNOWN: {msgbody}")

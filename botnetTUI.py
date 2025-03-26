@@ -26,7 +26,8 @@ class BotnetGUI:
             options = {
                 "1": "Start Payload",
                 "2": "Stop Payload",
-                "3": "Custom Command",
+                "3": "Disconnect Bots",
+                "4": "Custom Command"
             }
             table = Table()
             table.add_column("Option", justify="center", style="bold yellow")
@@ -56,11 +57,17 @@ class BotnetGUI:
                     self.controller.stop_payload_on_room
                 )
             elif choice == "3":
+                self.execute_command(
+                    room,
+                    lambda: None,
+                    self.controller.disconnect_bots
+                )
+            elif choice == "4":
                 command = Prompt.ask("[bold cyan]Enter the command to send (or press Enter to return)[/]")
                 if command:
                     self.execute_command(
                         room,
-                        lambda: self.controller.send_to_all(command),
+                        lambda: self.controller.for_all_rooms(CommandRoom.send_cmd, command),
                         lambda r: self.controller.send_command(command, r)
                     )
                 else:
