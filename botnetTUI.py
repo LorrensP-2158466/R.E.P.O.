@@ -59,7 +59,7 @@ class BotnetGUI:
             elif choice == "3":
                 self.execute_command(
                     room,
-                    lambda: None,
+                    self.controller.disconnect_all_bots,
                     self.controller.disconnect_bots
                 )
             elif choice == "4":
