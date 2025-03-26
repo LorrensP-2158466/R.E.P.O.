@@ -214,7 +214,6 @@ class Bot:
         elif command.startswith("PAYLOAD"):
             command, status = command.split(":", 1)
             if status == "START":
-                print("START")
                 self.payload.start()
             elif status == "STOP":
                 self.payload.stop()
