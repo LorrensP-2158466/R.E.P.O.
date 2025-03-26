@@ -1,8 +1,9 @@
+import sys
 import tkinter as tk
-import random
+from random import randint
 from PIL import Image, ImageTk
-import time
-import threading
+from time import sleep
+from threading import Thread
 import os
 
 class JumpingWindow:
@@ -25,15 +26,15 @@ class JumpingWindow:
         
         # tracking the mouse so the user can't exit it
         self.running = True
-        self.mouse_tracker_thread = threading.Thread(target=self.track_mouse_position)
+        self.mouse_tracker_thread = Thread(target=self.track_mouse_position)
         self.mouse_tracker_thread.daemon = True
         self.mouse_tracker_thread.start()
         
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
     
     def set_random_position(self):
-        x = random.randint(0, self.screen_width - self.window_width)
-        y = random.randint(0, self.screen_height - self.window_height)
+        x = randint(0, self.screen_width - self.window_width)
+        y = randint(0, self.screen_height - self.window_height)
         self.root.geometry(f"{self.window_width}x{self.window_height}+{x}+{y}")
     
     def track_mouse_position(self):
@@ -54,13 +55,20 @@ class JumpingWindow:
                     self.root.after(0, self.set_random_position)
                 
                 # Sleep to prevent high CPU usage
-                time.sleep(0.01)
+                sleep(0.05)
         except Exception as e:
             print(f"Error in mouse tracking: {e}")
+            
+    def resource_path(self, relative_path):
+        try:
+            base_path = sys._MEIPASS
+        except Exception:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(base_path, relative_path)
     
     def add_background_image(self):
         try:
-            image_path = os.path.dirname(os.path.realpath(__file__)) + "/donkey.gif" 
+            image_path = self.resource_path("donkey.gif")
             
             if not os.path.exists(image_path):
                 print(f"Image file not found: {image_path}")
